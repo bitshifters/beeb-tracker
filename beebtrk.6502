@@ -1,0 +1,1294 @@
+\ ******************************************************************
+\ * Beeb Tracker
+\ * Music player & visualiser in MODE 7
+\ * Kieran Connell & Simon Morris
+\ * Demo team name TBD! :)
+\ ******************************************************************
+
+
+\ ******************************************************************
+\ *	Define OS entries (could be INCLUDE bbc_os.h)
+\ ******************************************************************
+
+oswrch = &FFEE
+osasci = &FFE3
+osbyte = &FFF4
+osword = &FFF1
+EVENTV = &0220
+
+INKEY_esc = 112
+
+SEI_OP = $78
+CLI_OP = $58
+NOP_OP = $ea
+
+
+\ ******************************************************************
+\ *	Define debug flags
+\ ******************************************************************
+
+_DEBUG = TRUE
+
+\ ******************************************************************
+\ *	Define macros
+\ ******************************************************************
+
+MACRO SN_WRITE_ENABLE
+	LDX #&00: STX &FE40			; R0=Output Register "B" (write) (write 1 into bit 0 - write to sound chip)
+	NOP:NOP:NOP:NOP:NOP:NOP		; wait 8us (following LDX instruction takes 2 cycles)
+	LDX #&08: STX &FE40			; set sound chip write pin high
+ENDMACRO
+
+
+\ ******************************************************************
+\ *	Define global constants
+\ ******************************************************************
+
+\\ EXOMISER (compression library)
+EXO_buffer_len = 1024
+
+\\ VGM
+VGM_write_sound_data = &50
+VGM_wait_50_Hz = &63
+VGM_wait_60_Hz = &62
+VGM_wait_N_samples = &61
+VGM_end_of_stream = &66
+
+VGM_sample_rate = 44100
+VGM_50HZ_samples = (VGM_sample_rate / 50)
+VGM_60HZ_samples = (VGM_sample_rate / 60)
+VGM_100Hz_samples = (VGM_sample_rate / 100)
+VGM_POLL_samples = VGM_50HZ_samples
+
+\\ MODE 7
+MODE7_base_addr = &7C00
+MODE7_char_width = 40
+MODE7_char_height = 25
+MODE7_texel_width = (MODE7_char_width - 2) * 2
+MODE7_texel_height = MODE7_char_height * 3
+
+MODE7_alpha_black = 128
+MODE7_graphic_black = 144
+MODE7_contiguous = 153
+MODE7_separated = 154
+
+\\ FONT
+FONT_first_char = ' '
+FONT_last_char = '~'
+FONT_num_chars = FONT_last_char - FONT_first_char + 1
+
+
+\ ******************************************************************
+\ *	Define app constants
+\ ******************************************************************
+
+FX_num_freqs = 64
+FX_draw_at_row = 12				; bottom of vu meter
+SCR_draw_at_row = 0				; top of sine scroller
+SCR_sine_amp = 0				; no sine!
+
+
+\ ******************************************************************
+\ *	Define fast (zero page) runtime variables
+\ ******************************************************************
+
+\\ EXOMISER (compression library)
+EXO_zp_src_hi = $70
+EXO_zp_src_lo = EXO_zp_src_hi + 1
+EXO_zp_src_bi = EXO_zp_src_hi + 2
+EXO_zp_bitbuf = EXO_zp_src_hi + 3
+
+EXO_zp_len_lo  = $74
+EXO_zp_len_hi  = EXO_zp_len_lo + 1
+
+EXO_zp_bits_lo = $76
+EXO_zp_bits_hi = EXO_zp_bits_lo + 1
+
+EXO_zp_dest_hi = $78
+EXO_zp_dest_lo = EXO_zp_dest_hi + 1	; dest addr lo
+EXO_zp_dest_bi = EXO_zp_dest_hi + 2	; dest addr hi
+
+\\ Our own app variables
+ORG &7B
+GUARD &9F
+
+\\ Player vars
+.player_ended			SKIP 1		; non-zero when player has reached end of tune
+.player_data			SKIP 1		; temporary variable when decoding sound data - must be separate as player running on events
+.player_channel_vals	SKIP 8		; data values passed to each channel during audio playback
+.player_last_channel	SKIP 1		; last channel (register) refered to by the VGM sound data
+
+\\ Generic vars
+.tmp					SKIP 1		; don't really like nameless variables - too easy for them to clash when reusing
+.tmp2					SKIP 1		; ditto
+.scr_cur_msg_idx		SKIP 1		; current index into scr_message - only used during poll_scr
+.scr_cur_sine_idx		SKIP 1		; current index into sine table - only used during poll_scr
+.scr_y_offset			SKIP 1		; current y offset - only used during poll_scr
+
+.writeptr				SKIP 2		; generic write ptr
+.readptr				SKIP 2		; generic read ptr
+
+\\ Scroll text vars
+.scr_sine_idx			SKIP 1		; index into sine wave table
+.scr_msg_idx			SKIP 1		; index into scr_message
+.scr_col				SKIP 1		; current column in first character to be displayed
+
+
+\ ******************************************************************
+\ *	Start address to be saved
+\ ******************************************************************
+
+ORG &1900	      					; code origin - assume standard BBC Micro
+GUARD &7C00							; ensure code size doesn't hit start of screen memory
+
+.start
+
+
+\ ******************************************************************
+\ *	Code entry
+\ ******************************************************************
+
+\ ******************************************************************
+\ *	Main loop sequencing tick & draw code
+\ ******************************************************************
+
+.main
+{
+	\\ Initialise exomizer
+	JSR init_decruncher
+
+	\\ Initialise music player
+	JSR	init_player
+
+	\\ Initialise MODE 7
+	JSR init_mode7
+
+	\\ Initialise our effects
+	JSR init_fx
+	JSR init_scr
+
+	\\ Hook up Event vector
+	JSR start_eventv
+
+	\\ Main loop
+	.loop
+
+	\\ Check for Escape key
+	LDA #121
+	LDX #(INKEY_esc EOR &80)
+	JSR osbyte
+	TXA
+	BMI exit
+
+	\\ Wait for vsync
+	LDA #19
+	JSR osbyte
+
+	\\ Poll our effects
+	JSR poll_fx
+	JSR poll_scr
+
+	\\ Poll the music player
+	LDA player_ended
+	BEQ loop
+
+	\\ Until we finish
+	.exit
+
+	\\ Shutdown music player
+	JSR deinit_player
+
+	\\ Unhook Event vector
+	JSR stop_eventv
+
+	\\ Exit cleanly (we hope)
+	.return
+	RTS
+}
+
+
+.init_mode7
+{
+	\\ Set MODE 7
+	LDA #22: JSR oswrch
+	LDA #7: JSR oswrch
+
+	\\ Can't remember how to turn off cursor!
+
+	\\ Copy our screen data in
+	LDY #0
+	.loop
+	LDA mode7_screen_data,Y				; **SELF-MODIFIED CODE**
+	STA MODE7_base_addr,Y				; **SELF-MODIFIED CODE**
+
+	INY
+	BNE loop
+	INC loop + 2						; increment read address hi byte
+	INC loop + 5						; increment write address hi byte
+	BPL loop							; until >= &8000
+
+	.return
+	RTS
+}
+
+
+\ ******************************************************************
+\ *	Teletexel / MODE 7 functions & helpers
+\ ******************************************************************
+
+.teletexel_init						; set blank screen
+{
+	LDX #MODE7_contiguous
+	LDY #MODE7_char_height - 1
+
+	.loop
+	TYA:PHA
+	LDA #MODE7_graphic_black + 7
+	JSR teletexel_set_row_start
+	PLA:TAY
+	DEY
+	BPL loop
+
+	.return
+	RTS
+}
+
+.teletexel_set_row_start			; set row Y to char A, X
+{
+	PHA
+	LDA mode7_row_addr_LO,Y
+	STA writeptr
+	LDA mode7_row_addr_HI,Y
+	STA writeptr+1
+
+	LDY #0
+	PLA
+	STA (writeptr),Y
+	TXA:INY
+	STA (writeptr),Y
+
+	.return
+	RTS
+}
+
+.teletexel_erase_row				; row Y, start X, end A
+{
+	STA tmp
+
+	LDA mode7_row_addr_LO,Y
+	STA loop+1
+	LDA mode7_row_addr_HI,Y
+	STA loop+2
+
+	LDA #32
+	.loop
+	STA MODE7_base_addr,X			; **SELF-MODIFIED CODE**
+	INX
+	CPX tmp
+	BNE loop
+
+	.return
+	RTS	
+}
+
+MACRO TELETEXEL_CALC_WRITEPTR_AND_MASK				; preserves X destroys A & Y
+{
+	\\ Turn texel y into address of row
+	LDA mode7_texel_y_to_row_addr_LO,Y				; 4c
+	STA writeptr									; 3c
+	LDA mode7_texel_y_to_row_addr_HI,Y				; 4c
+	STA writeptr+1									; 3c
+
+	\\ Add x character offset
+	TXA												; 2c
+	LSR A											; 2c
+	BCS odd											; 3c
+
+	\\ Even
+	.even
+	\\ We know carry is clear
+	ADC writeptr									; 3c
+	STA writeptr									; 3c
+	BCC no_carry_even								; 3c
+	INC writeptr+1									; 5c
+	.no_carry_even
+	LDA mode7_texel_lookup_x_even,Y					; 4c
+	JMP plot_texel									; 3c
+
+	\\ Odd
+	.odd
+	CLC												; 2c
+	ADC writeptr									; 3c
+	STA writeptr									; 3c
+	BCC no_carry_odd								; 3c
+	INC writeptr+1									; 5c
+	.no_carry_odd
+	LDA mode7_texel_lookup_x_odd,Y					; 4c
+
+	.plot_texel
+}													; odd = 41c even = 42c  (not including EOR & STA)
+ENDMACRO
+
+.teletexel_plot_eor									; at X, Y
+{
+	TELETEXEL_CALC_WRITEPTR_AND_MASK
+
+	LDY #0											; 2c - not needed on MASTER
+	EOR (writeptr),Y								; 6c
+	STA (writeptr),Y								; 6c
+
+	.return
+	RTS												
+}													; total = 42+14 = 56c (not including RTS)
+
+.teletexel_plot										; at X, Y
+{
+	TELETEXEL_CALC_WRITEPTR_AND_MASK
+
+	LDY #0											; 2c
+	ORA (writeptr),Y								; 6c
+	STA (writeptr),Y								; 6c
+
+	.return
+	RTS
+}	
+
+.teletexel_erase									; at X, Y
+{
+	TELETEXEL_CALC_WRITEPTR_AND_MASK
+
+	EOR #&FF										; flip the bits
+	STA tmp
+	LDY #0											; 2c
+	LDA (writeptr),Y								; 6c
+	AND tmp
+	STA (writeptr),Y								; 6c
+
+	.return
+	RTS
+}	
+
+
+\ ******************************************************************
+\ *	Dodgy scrolltext code
+\ ******************************************************************
+
+.init_scr
+{
+	LDA #0
+	STA scr_msg_idx
+	STA scr_sine_idx
+	STA scr_col
+
+	\\ Generate font data
+	\\ Rather use predefined font!
+
+	LDA #LO(font_data)
+	STA writeptr
+	LDA #HI(font_data)
+	STA writeptr+1
+
+	LDX #FONT_first_char
+	.loop
+	STX font_charreq
+	
+	\\ Set up OSWORD call to obtain character definition
+	LDX #LO(font_charreq)
+	LDY #HI(font_charreq)
+	LDA #&A
+	JSR osword				; osword call
+	
+	\\ Rotate
+	LDY #0					; index into our write buffer
+	LDA #&80				; mask for char column, start top bit set
+	STA tmp
+
+	.rowtocol
+	LDA #1					; mask for fb col byte, start bottom bit set
+	STA tmp2
+
+	LDA #0
+	STA (writeptr),Y		; blank fb col byte first
+
+	LDX #0
+	.rowtoloop
+	LDA tmp					; load mask for column
+	AND font_chardef,X		; mask against char row
+	BEQ norowbit
+
+	LDA (writeptr),Y		; load existing fb byte
+	ORA tmp2				; mask in our bit
+	STA (writeptr),Y		; store back
+
+	.norowbit
+	ASL tmp2				; next bit in fb mask
+	INX
+	CPX #8
+	BNE rowtoloop
+
+	INY						; next fb row
+	
+	LSR tmp					; shift char mask right
+	BNE rowtocol			; until zero
+	
+	.endofloop
+	CLC
+	LDA writeptr
+	ADC #8
+	STA writeptr
+	LDA writeptr+1
+	ADC #0
+	STA writeptr+1
+
+	LDX font_charreq
+	INX
+	CPX #FONT_last_char+1
+	BNE loop
+
+	.return
+	RTS
+}
+
+.poll_scr
+{
+	\\ Crappy screen clear
+	LDY #SCR_draw_at_row + 0: LDX #2: LDA #40: JSR teletexel_erase_row
+	LDY #SCR_draw_at_row + 1: LDX #2: LDA #40: JSR teletexel_erase_row
+	LDY #SCR_draw_at_row + 2: LDX #2: LDA #40: JSR teletexel_erase_row
+
+	LDA scr_col
+	STA tmp						; current column in font
+
+	LDA scr_msg_idx
+	STA scr_cur_msg_idx			; current index into message
+
+	LDA scr_sine_idx
+	STA scr_cur_sine_idx
+
+	LDX #0						; X coord on screen
+	.xloop
+
+	LDY scr_cur_msg_idx
+	LDA scr_message,Y			; load current char from message
+	BNE continue				; finish if zero
+
+	LDA #0
+	STA scr_cur_msg_idx
+	JMP xloop					; wrap
+
+	.continue
+	SEC
+	SBC #FONT_first_char		; map to our font data
+	TAY
+
+	LDA font_data_addr_LO,Y
+	STA readptr
+	LDA font_data_addr_HI,Y
+	STA readptr+1				; look up address of font data
+
+	.colloop
+	LDY scr_cur_sine_idx
+	LDA scr_sine_table,Y
+	STA scr_y_offset
+	INY:INY						; increment into sine table for each column
+	STY scr_cur_sine_idx
+
+	LDY tmp						; current column
+	LDA (readptr),Y				; full column of bits
+	STA tmp2					; font slice
+
+	LDY #0						; Y coord on screen
+	.rowloop
+	LDA tmp2
+	AND #&1
+	BEQ zero					; no pixel
+
+	TYA:PHA
+	CLC
+	ADC scr_y_offset			
+	TAY
+	JSR teletexel_plot			; plot pixel at X, Y		- destroys A,X and writeptr
+	PLA:TAY
+
+	.zero
+	LSR tmp2					; next pixel
+	INY
+	CPY #8
+	BNE rowloop					; do this for all 8 pixels
+
+	INX							; next column on screen
+	CPX #MODE7_texel_width
+	BEQ done
+
+	INC tmp						; next column in font data
+	LDA tmp
+	CMP #8
+	BNE colloop					; until done whole char
+
+	LDA #0
+	STA tmp
+
+	INC scr_cur_msg_idx			; next char in scr_message
+	JMP xloop
+
+	.done
+	INC scr_col					; increment column for scroll
+	LDA scr_col
+	CMP #8
+	BNE return					; 8 columns
+
+	LDA #0
+	STA scr_col					; reset column
+	INC scr_msg_idx				; next char in scr_message
+
+	LDY scr_msg_idx
+	LDA scr_message,Y
+	BNE return
+
+	LDA #0
+	STA scr_msg_idx				; wrap at end of scr_message
+
+	.return
+	INC scr_sine_idx
+	INC scr_sine_idx
+	INC scr_sine_idx
+	INC scr_sine_idx			; increment into sine table each frame
+
+	RTS
+}
+
+
+\ ******************************************************************
+\ *	Graphic equaliser effect
+\ ******************************************************************
+
+.init_fx
+{
+	\\ Initialise the frequency array
+	LDY #FX_num_freqs - 1
+	LDA #0
+	.loop
+	STA freq_array,Y
+	DEY
+	BPL loop
+
+	.return
+	RTS
+}
+
+.poll_fx
+{
+	\\ Let values fall to zero
+	LDY #FX_num_freqs - 1
+	.loop
+	LDA freq_array,Y
+	BEQ zero
+	SEC
+	SBC #1
+	STA freq_array,Y
+	.zero
+	DEY
+	BPL loop
+
+	\\ TODO - rewrite this whole thing to only plot changes in columns
+
+	\\ Crappy screen clear
+	LDY #FX_draw_at_row - 4: LDX #3: LDA #37: JSR teletexel_erase_row
+	LDY #FX_draw_at_row - 3: LDX #3: LDA #37: JSR teletexel_erase_row
+	LDY #FX_draw_at_row - 2: LDX #3: LDA #37: JSR teletexel_erase_row
+	LDY #FX_draw_at_row - 1: LDX #3: LDA #37: JSR teletexel_erase_row
+	LDY #FX_draw_at_row - 0: LDX #3: LDA #37: JSR teletexel_erase_row
+
+	\\ Start at value 14 and work down
+	LDA #14
+	STA tmp
+
+	.yloop
+	LDX #68									; draw from x coordinate starting 68
+	LDY #0
+
+	\\ For each frequency value
+	.xloop
+	LDA freq_array,Y
+	BEQ empty
+	CMP tmp
+	BCC empty
+
+	\\ Plot if >= to our current tmp value
+	TYA:PHA
+	SEC
+	LDA #(FX_draw_at_row * 3) + 2			; bottom y coordinate
+	SBC tmp
+	TAY
+
+	JSR teletexel_plot						; only X is preserved
+	PLA:TAY
+
+	\\ Otherwise don't plot
+	.empty
+	DEX
+	INY
+	CPY #FX_num_freqs
+	BNE xloop
+
+	DEC tmp
+	BMI done
+
+	JMP yloop
+	.done
+	
+	.return
+	RTS
+}
+
+
+\ ******************************************************************
+\ *	VGM music player
+\ ******************************************************************
+
+.init_player
+{
+	\\ Consume sample rate byte
+	jsr get_decrunched_byte
+
+	LDA #0
+	STA player_ended
+	STA player_last_channel
+
+	.return
+	RTS
+}
+
+.deinit_player
+{
+	\\ Zero volume on all channels
+	SEI
+	LDX #&FF: STX &FE43					; R3=Data Direction Register "A" set to output
+	LDA #&9F: STA &FE41					; tone 3 volume OFF
+	SN_WRITE_ENABLE
+	LDA #&BF: STA &FE41					; tone 2 volume OFF
+	SN_WRITE_ENABLE
+	LDA #&DF: STA &FE41					; tone 1 volume OFF
+	SN_WRITE_ENABLE
+	LDA #&FF: STA &FE41					; noise volume OFF
+	SN_WRITE_ENABLE
+	CLI
+	
+	.return
+	RTS
+}
+
+.poll_player
+{
+	\\ Assume this is called every 20ms..
+
+	\\ Get next byte from the stream
+	jsr get_decrunched_byte
+	bcs _sample_end
+
+	cmp #&ff
+	beq _player_end
+
+	\\ Byte is #data bytes to send to sound chip:
+	TAY
+	.sound_data_loop
+	BEQ wait_20_ms
+	TYA:PHA
+	jsr get_decrunched_byte
+	bcc not_sample_end
+	PLA
+	JMP _sample_end
+
+	.not_sample_end
+	JSR psg_decode
+	JSR psg_strobe
+	PLA:TAY:DEY
+	JMP sound_data_loop
+	
+	.wait_20_ms
+	CLC
+	RTS
+
+	._player_end
+	STA player_ended
+
+	._sample_end
+	SEC
+	RTS
+}
+
+.psg_strobe
+{
+	sei					; **SELF-MODIFIED CODE**
+	ldy #255
+	sty $fe43
+	
+	sta $fe41
+	lda #0
+	sta $fe40
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	lda #$08
+	sta $fe40
+	cli					; **SELF-MODIFIED CODE**
+	RTS
+}
+
+PSG_STROBE_SEI_INSN = psg_strobe
+PSG_STROBE_CLI_INSN = psg_strobe + 25
+
+.psg_decode
+{
+	STA player_data
+	AND #&80
+	BEQ second_byte
+
+	\\ First byte
+
+	\\ Obtain register field
+	LDA player_data
+	AND #&70
+	LSR A:LSR A:LSR A:LSR A
+	STA player_last_channel
+
+	TAY
+
+	LDA player_data
+	AND #&01
+	BEQ freq
+
+	\\ Volume
+	LDA player_data
+	AND #&0F
+	STA player_channel_vals,Y
+
+	SEC
+	LDA #15
+	SBC player_channel_vals,Y
+	STA player_channel_vals,Y
+	JMP return
+
+	\\ Frequency
+	.freq
+	JMP return
+
+	.second_byte
+	LDA player_data
+	AND #&3F
+	LDY player_last_channel
+	STA player_channel_vals,Y
+
+	;CPY #4
+	;BNE return
+	TAX
+	LDA #15
+	STA freq_array,X
+
+	.return
+	LDA player_data
+	RTS
+}
+
+
+\ ******************************************************************
+\ *	Event Vector Routines
+\ ******************************************************************
+
+.start_eventv
+{
+	\\ Remove interrupt instructions
+	lda #NOP_OP
+	sta PSG_STROBE_SEI_INSN
+	sta PSG_STROBE_CLI_INSN
+	
+	\\ Set new Event handler
+	sei
+	lda #LO(eventv_handler)
+	sta EVENTV
+	lda #HI(eventv_handler)
+	sta EVENTV+1
+	cli
+	
+	\\ Enable VSYNC event.
+	lda #14
+	ldx #4
+	jsr osbyte
+	rts
+}
+	
+.stop_eventv
+{
+	\\ Disable VSYNC event.
+	lda #13
+	ldx #4
+	jsr osbyte
+
+	\\ Insert interrupt instructions back
+	lda #SEI_OP
+	sta PSG_STROBE_SEI_INSN
+	lda #CLI_OP
+	sta PSG_STROBE_CLI_INSN
+	rts
+}
+
+.eventv_handler
+{
+	php
+	cmp #4
+	bne not_vsync
+
+	\\ Preserve registers
+	pha:TXA:PHA:TYA:PHA
+
+	\\ Poll the music player
+	jsr poll_player
+
+	\\ Restore registers
+	PLA:TAY:PLA:TAX:pla
+
+	\\ Return
+    .not_vsync
+	plp
+	rts
+}
+
+
+\ ******************************************************************
+\ *	Debug helpers
+\ ******************************************************************
+
+IF _DEBUG
+.debug_hexchars
+EQUS "0123456789abcdef"
+
+.debug_print_A				; trashes X
+{
+	PHA:PHA
+	LSR A:LSR A:LSR A:LSR A
+	TAX
+	LDA debug_hexchars,X
+	JSR oswrch
+	PLA
+	AND #&0F
+	TAX
+	LDA debug_hexchars,X
+	JSR oswrch
+	LDA #32
+	JSR oswrch
+	PLA
+	RTS
+}
+ENDIF
+
+\ ******************************************************************
+\ *	Exomiser (decompression library)
+\ ******************************************************************
+
+; -------------------------------------------------------------------
+; for this get_crunched_byte routine to work the crunched data has to be
+; crunced using the -m <buffersize> and possibly the -l flags. Any other
+; flag will just mess things up.
+.get_crunched_byte
+{
+	INC _byte_lo
+	bne _byte_skip_hi
+	INC _byte_hi			; forward decrunch
+._byte_skip_hi:
+
+._byte
+	lda VGM_stream_data-1		; needs to be set correctly before
+_byte_lo = _byte + 1
+_byte_hi = _byte + 2
+	rts						; decrunch_file is called.
+}
+; VGM_end_of_data needs to point to the address just after the address
+; of the last byte of crunched data.
+; -------------------------------------------------------------------
+
+
+; -------------------------------------------------------------------
+; jsr this label to init the decruncher, it will init used zeropage
+; zero page locations and the decrunch tables
+; no constraints on register content, however the
+; decimal flag has to be #0 (it almost always is, otherwise do a cld)
+; -------------------------------------------------------------------
+.init_decruncher
+{
+	jsr get_crunched_byte
+	sta EXO_zp_bitbuf
+
+	ldx #0
+	stx EXO_zp_dest_lo
+	stx EXO_zp_dest_hi
+	stx EXO_zp_len_lo
+	stx EXO_zp_len_hi
+	ldy #0
+; -------------------------------------------------------------------
+; calculate tables (49 bytes)
+; x and y must be #0 when entering
+;
+._init_nextone
+	inx
+	tya
+	and #$0f
+	beq _init_shortcut		; starta på ny sekvens
+
+	txa			; this clears reg a
+	lsr a			; and sets the carry flag
+	ldx EXO_zp_bits_lo
+._init_rolle
+	rol a
+	rol EXO_zp_bits_hi
+	dex
+	bpl _init_rolle		; c = 0 after this (rol EXO_zp_bits_hi)
+
+	adc tabl_lo-1,y
+	tax
+
+	lda EXO_zp_bits_hi
+	adc tabl_hi-1,y
+._init_shortcut
+	sta tabl_hi,y
+	txa
+	sta tabl_lo,y
+
+	ldx #4
+	jsr _bit_get_bits		; clears x-reg.
+	sta tabl_bi,y
+	iny
+	cpy #52
+	bne _init_nextone
+}
+\\ Fall through!	
+
+._do_exit
+	rts
+
+; -------------------------------------------------------------------
+; decrunch one byte
+;
+.get_decrunched_byte
+{
+	ldy EXO_zp_len_lo
+	bne _do_sequence
+	ldx EXO_zp_len_hi
+	bne _do_sequence2
+
+	jsr _bit_get_bit1
+	beq _get_sequence
+; -------------------------------------------------------------------
+; literal handling (13 bytes)
+;
+	jsr get_crunched_byte
+	bcc _do_literal
+; -------------------------------------------------------------------
+; count zero bits + 1 to get length table index (10 bytes)
+; y = x = 0 when entering
+;
+._get_sequence
+._seq_next1
+	iny
+	jsr _bit_get_bit1
+	beq _seq_next1
+	cpy #$11
+	bcs _do_exit
+; -------------------------------------------------------------------
+; calulate length of sequence (zp_len) (17 bytes)
+;
+	ldx tabl_bi - 1,y
+	jsr _bit_get_bits
+	adc tabl_lo - 1,y
+	sta EXO_zp_len_lo
+	lda EXO_zp_bits_hi
+	adc tabl_hi - 1,y
+	sta EXO_zp_len_hi
+; -------------------------------------------------------------------
+; here we decide what offset table to use (20 bytes)
+; x is 0 here
+;
+	bne _seq_nots123
+	ldy EXO_zp_len_lo
+	cpy #$04
+	bcc _seq_size123
+._seq_nots123
+	ldy #$03
+._seq_size123
+	ldx tabl_bit - 1,y
+	jsr _bit_get_bits
+	adc tabl_off - 1,y
+	tay
+; -------------------------------------------------------------------
+; calulate absolute offset (zp_src) (27 bytes)
+;
+	ldx tabl_bi,y
+	jsr _bit_get_bits;
+	adc tabl_lo,y
+	bcc _seq_skipcarry
+	inc EXO_zp_bits_hi
+	clc
+._seq_skipcarry
+	adc EXO_zp_dest_lo
+	sta EXO_zp_src_lo
+	lda EXO_zp_bits_hi
+	adc tabl_hi,y
+	adc EXO_zp_dest_hi
+; -------------------------------------------------------------------
+	cmp #HI(EXO_buffer_len)
+	bcc _seq_offset_ok
+	sbc #HI(EXO_buffer_len)
+	clc
+; -------------------------------------------------------------------
+._seq_offset_ok
+	sta EXO_zp_src_hi
+	adc #HI(EXO_buffer_start)
+	sta EXO_zp_src_bi
+._do_sequence
+	ldy #0
+._do_sequence2
+	ldx EXO_zp_len_lo
+	bne _seq_len_dec_lo
+	dec EXO_zp_len_hi
+._seq_len_dec_lo
+	dec EXO_zp_len_lo
+; -------------------------------------------------------------------
+	ldx EXO_zp_src_lo
+	bne _seq_src_dec_lo
+	ldx EXO_zp_src_hi
+	bne _seq_src_dec_hi
+; ------- handle buffer wrap problematics here ----------------------
+	ldx #HI(EXO_buffer_len)
+	stx EXO_zp_src_hi
+	ldx #HI(EXO_buffer_end)
+	stx EXO_zp_src_bi
+; -------------------------------------------------------------------
+._seq_src_dec_hi
+	dec EXO_zp_src_hi
+	dec EXO_zp_src_bi
+._seq_src_dec_lo
+	dec EXO_zp_src_lo
+; -------------------------------------------------------------------
+	lda (EXO_zp_src_lo),y
+; -------------------------------------------------------------------
+._do_literal
+	ldx EXO_zp_dest_lo
+	bne _seq_dest_dec_lo
+	ldx EXO_zp_dest_hi
+	bne _seq_dest_dec_hi
+; ------- handle buffer wrap problematics here ----------------------
+	ldx #HI(EXO_buffer_len)
+	stx EXO_zp_dest_hi
+	ldx #HI(EXO_buffer_end)
+	stx EXO_zp_dest_bi
+; -------------------------------------------------------------------
+._seq_dest_dec_hi
+	dec EXO_zp_dest_hi
+	dec EXO_zp_dest_bi
+._seq_dest_dec_lo
+	dec EXO_zp_dest_lo
+; -------------------------------------------------------------------
+	sta (EXO_zp_dest_lo),y
+	clc
+	rts
+}
+
+; -------------------------------------------------------------------
+; two small static tables (6 bytes)
+;
+.tabl_bit
+{
+	EQUB 2,4,4
+}
+.tabl_off
+{
+	EQUB 48,32,16
+}
+
+; -------------------------------------------------------------------
+; get x + 1 bits (1 byte)
+;
+._bit_get_bit1
+	inx
+; -------------------------------------------------------------------
+; get bits (31 bytes)
+;
+; args:
+;   x = number of bits to get
+; returns:
+;   a = #bits_lo
+;   x = #0
+;   c = 0
+;   EXO_zp_bits_lo = #bits_lo
+;   EXO_zp_bits_hi = #bits_hi
+; notes:
+;   y is untouched
+;   other status bits are set to (a == #0)
+; -------------------------------------------------------------------
+._bit_get_bits
+{
+	lda #$00
+	sta EXO_zp_bits_lo
+	sta EXO_zp_bits_hi
+	cpx #$01
+	bcc _bit_bits_done
+	lda EXO_zp_bitbuf
+._bit_bits_next
+	lsr a
+	bne _bit_ok
+	jsr get_crunched_byte
+	ror a
+._bit_ok
+	rol EXO_zp_bits_lo
+	rol EXO_zp_bits_hi
+	dex
+	bne _bit_bits_next
+	sta EXO_zp_bitbuf
+	lda EXO_zp_bits_lo
+._bit_bits_done
+	rts
+}
+; -------------------------------------------------------------------
+; end of decruncher
+; -------------------------------------------------------------------
+
+; -------------------------------------------------------------------
+; this 156 byte table area may be relocated. It may also be clobbered
+; by other data between decrunches.
+; -------------------------------------------------------------------
+.decrunch_table
+.tabl_bi  SKIP 156
+tabl_lo = decrunch_table + 52
+tabl_hi = decrunch_table + 104
+
+; -------------------------------------------------------------------
+; end of decruncher
+; -------------------------------------------------------------------
+
+\ ******************************************************************
+\ *	Stored data
+\ ******************************************************************
+
+.scr_message
+EQUS "BeebTracker scrolltext in the wrong place! 0123456789... "
+EQUB 0
+
+
+\ ******************************************************************
+\ *	Look up tables
+\ ******************************************************************
+
+\\ Start address of each row in MODE 7 - wasteful but helpful
+.mode7_row_addr_LO
+FOR n, 0, MODE7_char_height-1, 1
+EQUB LO(MODE7_base_addr + n * MODE7_char_width)
+NEXT
+
+.mode7_row_addr_HI
+FOR n, 0, MODE7_char_height-1, 1
+EQUB HI(MODE7_base_addr + n * MODE7_char_width)
+NEXT
+
+\\ Lookup byte address for a given teletexel y coordinate - wasteful but fast
+.mode7_texel_y_to_row_addr_LO
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB LO(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
+NEXT
+
+.mode7_texel_y_to_row_addr_HI
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB HI(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
+NEXT
+
+\\ Lookup bit mask for a given teletexel y coordinate - wasteful but fast
+.mode7_texel_lookup_x_even
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB 1 << ((n % 3) * 2)
+NEXT
+
+.mode7_texel_lookup_x_odd
+FOR n, 0, MODE7_texel_height-1, 1
+	IF (n % 3) = 0
+		EQUB 2
+	ELIF (n % 3) = 1
+		EQUB 8
+	ELSE
+		EQUB 64			; stupid teletext spec
+	ENDIF
+NEXT
+
+\\ Lookup font data for each char
+.font_data_addr_LO
+FOR n, 0, FONT_num_chars, 1
+EQUB LO(font_data + n * 8)
+NEXT
+
+.font_data_addr_HI
+FOR n, 0, FONT_num_chars, 1
+EQUB HI(font_data + n * 8)
+NEXT
+
+\\ Dodgy sine wave table
+.scr_sine_table
+FOR n, 0, 255, 1
+EQUB SCR_draw_at_row * 3 + SCR_sine_amp * SIN(n * PI / 64)
+NEXT
+
+
+\ ******************************************************************
+\ *	MODE 7 screen data
+\ ******************************************************************
+
+.mode7_screen_data
+INCBIN "screen2.mode7"
+
+\ ******************************************************************
+\ *	EXO VGM data file
+\ * This must be compressed using the following flags:
+\ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
+\ ******************************************************************
+
+\\ TODO - load this at run-time!
+.VGM_stream_data
+;INCBIN "fluid_beeb_50.raw.exo"
+;INCBIN "ice_opt_beeb_50_raw.exo"
+;INCBIN "exception_beeb.raw.exo"
+INCBIN "master_beeb.raw.exo"
+.VGM_end_of_data
+
+
+\ ******************************************************************
+\ *	End address to be saved
+\ ******************************************************************
+
+.end
+
+
+\ ******************************************************************
+\ *	Space reserved for runtime buffers not preinitialised
+\ ******************************************************************
+
+\\ Exomiser unpack buffer (must be page aligned)
+ALIGN &100
+.EXO_buffer_start
+SKIP EXO_buffer_len
+.EXO_buffer_end
+
+\\ Frequency array for vu-meter effect
+.freq_array
+SKIP FX_num_freqs
+
+\\ Temporary workspace for character conversion
+.font_charreq			SKIP 1			; character definition required
+.font_chardef			SKIP 8			; character definition bytes
+
+.font_data
+SKIP					8 * FONT_num_chars
+
+\ ******************************************************************
+\ *	Save the code
+\ ******************************************************************
+
+SAVE "BeebTrk", start, end
