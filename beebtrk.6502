@@ -10,6 +10,7 @@
 \ *	Define OS entries (could be INCLUDE bbc_os.h)
 \ ******************************************************************
 
+osfile = &FFDD
 oswrch = &FFEE
 osasci = &FFE3
 osbyte = &FFF4
@@ -17,6 +18,7 @@ osword = &FFF1
 EVENTV = &0220
 
 INKEY_esc = 112
+INKEY_q = 16
 
 SEI_OP = $78
 CLI_OP = $58
@@ -39,6 +41,25 @@ MACRO SN_WRITE_ENABLE
 	LDX #&08: STX &FE40			; set sound chip write pin high
 ENDMACRO
 
+MACRO LOAD_FILE_TO filename_ptr, address
+{
+	LDA #LO(filename_ptr)
+	STA osfile_params + 0
+	LDA #HI(filename_ptr)
+	STA osfile_params + 1
+	LDA #LO(address)
+	STA osfile_params + 2
+	LDA #HI(address)
+	STA osfile_params + 3
+	LDA #0
+	STA osfile_params + 6
+
+	LDX #LO(osfile_params)
+	LDY #HI(osfile_params)
+	LDA #&FF
+	JSR osfile
+}
+ENDMACRO
 
 \ ******************************************************************
 \ *	Define global constants
@@ -73,15 +94,16 @@ MODE7_contiguous = 153
 MODE7_separated = 154
 
 \\ FONT
-FONT_first_char = ' '
-FONT_last_char = '~'
-FONT_num_chars = FONT_last_char - FONT_first_char + 1
+FONT_first_glyph = ' '
+FONT_last_glyph = '~'
+FONT_num_glyphs = FONT_last_glyph - FONT_first_glyph + 1
 
 
 \ ******************************************************************
 \ *	Define app constants
 \ ******************************************************************
 
+NUM_vgm_files = 4
 FX_num_freqs = 64
 FX_draw_at_row = 12				; bottom of vu meter
 SCR_draw_at_row = 0				; top of sine scroller
@@ -115,10 +137,10 @@ GUARD &9F
 \\ Player vars
 .player_ended			SKIP 1		; non-zero when player has reached end of tune
 .player_data			SKIP 1		; temporary variable when decoding sound data - must be separate as player running on events
-.player_channel_vals	SKIP 8		; data values passed to each channel during audio playback
+.player_channel_vals	SKIP 8		; data values passed to each channel during audio playback (4x channels x pitch + volume)
 .player_last_channel	SKIP 1		; last channel (register) refered to by the VGM sound data
 
-\\ Generic vars
+\\ Generic / temporary vars
 .tmp					SKIP 1		; don't really like nameless variables - too easy for them to clash when reusing
 .tmp2					SKIP 1		; ditto
 .scr_cur_msg_idx		SKIP 1		; current index into scr_message - only used during poll_scr
@@ -133,6 +155,7 @@ GUARD &9F
 .scr_msg_idx			SKIP 1		; index into scr_message
 .scr_col				SKIP 1		; current column in first character to be displayed
 
+.file_no				SKIP 1
 
 \ ******************************************************************
 \ *	Start address to be saved
@@ -149,57 +172,87 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 \ ******************************************************************
 
 \ ******************************************************************
-\ *	Main loop sequencing tick & draw code
+\ *	Main loop including high-level state machine
 \ ******************************************************************
 
 .main
 {
-	\\ Initialise exomizer
+\\ ***** System initialise ***** \\
+
+	\\ Set MODE 7
+	LDA #22: JSR oswrch
+	LDA #7: JSR oswrch
+
+	\\ Can't remember how to turn off cursor!
+
+	\\ Load first file in our list
+	LDA #0
+	
+\\ ***** Enter loading state ***** \\
+
+	.enter_loading_state
+	STA file_no
+	JSR load_file_from_table
+
+	\\ Returned error
+	BNE return
+
+\\ ***** Enter demo state ***** \\
+
+	\\ Initialise exomizer - must have some data ready to decrunch
+	LDX #LO(VGM_stream_data - 1)
+	LDY #HI(VGM_stream_data - 1)
 	JSR init_decruncher
 
-	\\ Initialise music player
+	\\ Initialise music player - consumes first crunched byte
 	JSR	init_player
 
-	\\ Initialise MODE 7
-	JSR init_mode7
+	\\ Initialise demo state
+	JSR init_demo
 
-	\\ Initialise our effects
-	JSR init_fx
-	JSR init_scr
+	\\ Demo loop
+	.demo_loop
+	{
+		\\ Check for Escape key
+		LDA #121
+		LDX #(INKEY_q EOR &80)
+		JSR osbyte
+		TXA
+		BMI exit_demo
 
-	\\ Hook up Event vector
-	JSR start_eventv
+		\\ Wait for vsync
+		LDA #19
+		JSR osbyte
 
-	\\ Main loop
-	.loop
+		\\ Poll our demo
+		JSR poll_demo
 
-	\\ Check for Escape key
-	LDA #121
-	LDX #(INKEY_esc EOR &80)
-	JSR osbyte
-	TXA
-	BMI exit
+		\\ Returns whether player has finished
+		BEQ demo_loop
 
-	\\ Wait for vsync
-	LDA #19
-	JSR osbyte
+		.exit_demo
 
-	\\ Poll our effects
-	JSR poll_fx
-	JSR poll_scr
+		\\ Deinitialise demo state
+		JSR deinit_demo
+	}
 
-	\\ Poll the music player
-	LDA player_ended
-	BEQ loop
-
-	\\ Until we finish
-	.exit
+\\ ***** Exit demo state ***** \\
 
 	\\ Shutdown music player
 	JSR deinit_player
+	
+\\ ***** Trigger next load ***** \\
 
-	\\ Unhook Event vector
-	JSR stop_eventv
+	\\ Increment file in table
+	LDX file_no
+	INX
+	CPX #NUM_vgm_files
+	BCC next_file
+	LDX #0
+	.next_file
+	STX file_no
+	TXA
+	JMP enter_loading_state
 
 	\\ Exit cleanly (we hope)
 	.return
@@ -207,15 +260,13 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 }
 
 
-.init_mode7
+\ ******************************************************************
+\ *	Demo state routines
+\ ******************************************************************
+
+.init_demo
 {
-	\\ Set MODE 7
-	LDA #22: JSR oswrch
-	LDA #7: JSR oswrch
-
-	\\ Can't remember how to turn off cursor!
-
-	\\ Copy our screen data in
+	\\ Initialise MODE 7 screen
 	LDY #0
 	.loop
 	LDA mode7_screen_data,Y				; **SELF-MODIFIED CODE**
@@ -227,6 +278,67 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 	INC loop + 5						; increment write address hi byte
 	BPL loop							; until >= &8000
 
+	\\ Initialise our effects
+	JSR init_fx
+	JSR init_scr
+
+	\\ Hook up Event vector
+	JSR start_eventv
+
+	.return
+	RTS
+}
+
+.poll_demo
+{
+	\\ Poll our effects
+	JSR poll_fx
+	JSR poll_scr
+
+	\\ Poll the music player
+	LDA player_ended
+
+	.return
+	RTS
+}
+
+.deinit_demo
+{
+	\\ Unhook Event vector
+	JSR stop_eventv
+
+	.return
+	RTS
+}
+
+
+\ ******************************************************************
+\ *	File loading routines
+\ ******************************************************************
+
+.load_file_from_table			; A = index into our table
+{
+	ASL A:TAX
+
+	LDA loading_table,X
+	STA osfile_params + 0
+	LDA loading_table+1,X
+	STA osfile_params + 1
+
+	LDA #LO(VGM_stream_data)
+	STA osfile_params + 2
+	LDA #HI(VGM_stream_data)
+	STA osfile_params + 3
+
+	LDA #0
+	STA osfile_params + 6
+
+	LDX #LO(osfile_params)
+	LDY #HI(osfile_params)
+	LDA #&FF
+	JSR osfile
+
+	LDA #0
 	.return
 	RTS
 }
@@ -388,7 +500,7 @@ ENDMACRO
 	LDA #HI(font_data)
 	STA writeptr+1
 
-	LDX #FONT_first_char
+	LDX #FONT_first_glyph
 	.loop
 	STX font_charreq
 	
@@ -442,7 +554,7 @@ ENDMACRO
 
 	LDX font_charreq
 	INX
-	CPX #FONT_last_char+1
+	CPX #FONT_last_glyph+1
 	BNE loop
 
 	.return
@@ -478,7 +590,7 @@ ENDMACRO
 
 	.continue
 	SEC
-	SBC #FONT_first_char		; map to our font data
+	SBC #FONT_first_glyph		; map to our font data
 	TAY
 
 	LDA font_data_addr_LO,Y
@@ -884,6 +996,7 @@ EQUS "0123456789abcdef"
 }
 ENDIF
 
+
 \ ******************************************************************
 \ *	Exomiser (decompression library)
 \ ******************************************************************
@@ -900,7 +1013,7 @@ ENDIF
 ._byte_skip_hi:
 
 ._byte
-	lda VGM_stream_data-1		; needs to be set correctly before
+	lda VGM_stream_data-1	; **SELF-MODIFIED CODE**
 _byte_lo = _byte + 1
 _byte_hi = _byte + 2
 	rts						; decrunch_file is called.
@@ -909,6 +1022,8 @@ _byte_hi = _byte + 2
 ; of the last byte of crunched data.
 ; -------------------------------------------------------------------
 
+EXO_crunch_byte_lo = get_crunched_byte + 9
+EXO_crunch_byte_hi = get_crunched_byte + 10
 
 ; -------------------------------------------------------------------
 ; jsr this label to init the decruncher, it will init used zeropage
@@ -916,8 +1031,11 @@ _byte_hi = _byte + 2
 ; no constraints on register content, however the
 ; decimal flag has to be #0 (it almost always is, otherwise do a cld)
 ; -------------------------------------------------------------------
-.init_decruncher
+.init_decruncher				; pass in address of (crunched data-1) in X,Y
 {
+	STX EXO_crunch_byte_lo
+	STY EXO_crunch_byte_hi
+
 	jsr get_crunched_byte
 	sta EXO_zp_bitbuf
 
@@ -1171,9 +1289,31 @@ tabl_hi = decrunch_table + 104
 \ *	Stored data
 \ ******************************************************************
 
+.loading_table			; update NUM_vgm_files if this changes
+EQUB LO(vgm_filename_1): EQUB HI(vgm_filename_1)
+EQUB LO(vgm_filename_2): EQUB HI(vgm_filename_2)
+EQUB LO(vgm_filename_3): EQUB HI(vgm_filename_3)
+EQUB LO(vgm_filename_4): EQUB HI(vgm_filename_4)
+
 .scr_message
 EQUS "BeebTracker scrolltext in the wrong place! 0123456789... "
 EQUB 0
+
+.vgm_filename_1
+EQUS "master"
+EQUB 13
+
+.vgm_filename_2
+EQUS "except"
+EQUB 13
+
+.vgm_filename_3
+EQUS "fluid"
+EQUB 13
+
+.vgm_filename_4
+EQUS "ice"
+EQUB 13
 
 
 \ ******************************************************************
@@ -1221,12 +1361,12 @@ NEXT
 
 \\ Lookup font data for each char
 .font_data_addr_LO
-FOR n, 0, FONT_num_chars, 1
+FOR n, 0, FONT_num_glyphs, 1
 EQUB LO(font_data + n * 8)
 NEXT
 
 .font_data_addr_HI
-FOR n, 0, FONT_num_chars, 1
+FOR n, 0, FONT_num_glyphs, 1
 EQUB HI(font_data + n * 8)
 NEXT
 
@@ -1243,21 +1383,6 @@ NEXT
 
 .mode7_screen_data
 INCBIN "screen2.mode7"
-
-\ ******************************************************************
-\ *	EXO VGM data file
-\ * This must be compressed using the following flags:
-\ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
-\ ******************************************************************
-
-\\ TODO - load this at run-time!
-.VGM_stream_data
-;INCBIN "fluid_beeb_50.raw.exo"
-;INCBIN "ice_opt_beeb_50_raw.exo"
-;INCBIN "exception_beeb.raw.exo"
-INCBIN "master_beeb.raw.exo"
-.VGM_end_of_data
-
 
 \ ******************************************************************
 \ *	End address to be saved
@@ -1285,10 +1410,28 @@ SKIP FX_num_freqs
 .font_chardef			SKIP 8			; character definition bytes
 
 .font_data
-SKIP					8 * FONT_num_chars
+SKIP					8 * FONT_num_glyphs
+
+.osfile_params			SKIP 18
+
+\ ******************************************************************
+\ *	EXO VGM data file
+\ * This must be compressed using the following flags:
+\ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
+\ ******************************************************************
+
+\\ TODO - load this at run-time!
+ALIGN &100
+.VGM_stream_data
+.VGM_end_of_data
+
 
 \ ******************************************************************
 \ *	Save the code
 \ ******************************************************************
 
 SAVE "BeebTrk", start, end
+PUTFILE "fluid_beeb_50.raw.exo", "fluid", 0
+PUTFILE "ice_opt_beeb_50_raw.exo", "ice", 0
+PUTFILE "exception_beeb.raw.exo", "except", 0
+PUTFILE "master_beeb.raw.exo", "master", 0

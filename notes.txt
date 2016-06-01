@@ -1,0 +1,60 @@
+BeebTracker
+~~~~~~~~~~~
+
+Infrastructure
+- Better build system
+- Multiple source files (demo, player, exo) for library reuse
+
+VGM Pre-process & Player
+- Track length in metadata for tune progress
+- Track speed in metadata for tracker update?
+- Mapping from sound data to note notation for tracker (c#3f etc.)
+- Ability to look ahead into sound data for upcoming tracker
+- Song name & author metadata <- in VGM file or embedded in demo code?
+- Support for looping tracks?
+- Better extraction of frequency & beat data from tune for fx
+
+Scroll text FX
+- Smaller font ~ 6x6 pixels per letter
+- Store font as MODE 7 optimised data (2x3 pixels per byte)
+- Rewrite for just horizontal scrolling <- 1 or 2 teletexel scrolling?
+- Ability to set scroll text message
+
+VU FX
+- Rewrite to only update changed teletexels not redraw entirely each frame
+- Any changes to FX in general?
+- Hook up to improved frequency & beat extraction
+
+Tracker FX
+- Write tracker display routine!
+- Timer display routine
+
+Loader FX
+- Static MODE 7 screen at minimum
+- Ideally animated - perhaps MODE 7 vector routines?
+- Ability to drive animation on events whilst loading
+
+Intro FX
+- Static MODE 7 screen at minimum
+
+Outro FX
+- Static MODE 7 screen at minimum
+
+Main Loop
+- State machine for demo logic
+	- Intro
+	- Menu
+	- Loading
+	- Tracker
+	- Outro
+- (Would be nice if menu could overlay running tracker?)
+- Cleanly kill & restart player
+- Loader for VGM files
+- Where is metadata for files etc. stored?
+- (Compile time configuration from a file)
+- Optimise draw routines for raster
+
+Content
+- Pick VGM music files for disk #1 (themed?)
+- Assemble meta data
+- Write scroll text for each file?
