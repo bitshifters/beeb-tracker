@@ -41,25 +41,6 @@ MACRO SN_WRITE_ENABLE
 	LDX #&08: STX &FE40			; set sound chip write pin high
 ENDMACRO
 
-MACRO LOAD_FILE_TO filename_ptr, address
-{
-	LDA #LO(filename_ptr)
-	STA osfile_params + 0
-	LDA #HI(filename_ptr)
-	STA osfile_params + 1
-	LDA #LO(address)
-	STA osfile_params + 2
-	LDA #HI(address)
-	STA osfile_params + 3
-	LDA #0
-	STA osfile_params + 6
-
-	LDX #LO(osfile_params)
-	LDY #HI(osfile_params)
-	LDA #&FF
-	JSR osfile
-}
-ENDMACRO
 
 \ ******************************************************************
 \ *	Define global constants
@@ -103,12 +84,11 @@ FONT_num_glyphs = FONT_last_glyph - FONT_first_glyph + 1
 \ *	Define app constants
 \ ******************************************************************
 
-NUM_vgm_files = 4
-FX_num_freqs = 64
-FX_draw_at_row = 12				; bottom of vu meter
-SCR_draw_at_row = 0				; top of sine scroller
-SCR_sine_amp = 0				; no sine!
+NUM_vgm_files = 4				; size of our file table
 
+FX_num_freqs = 64
+FX_draw_at_row = 12				; bottom of vu meter (row)
+FX_draw_end_x = 68				; right of vu meter (pixel)
 
 \ ******************************************************************
 \ *	Define fast (zero page) runtime variables
@@ -140,22 +120,36 @@ GUARD &9F
 .player_channel_vals	SKIP 8		; data values passed to each channel during audio playback (4x channels x pitch + volume)
 .player_last_channel	SKIP 1		; last channel (register) refered to by the VGM sound data
 
-\\ Generic / temporary vars
-.tmp					SKIP 1		; don't really like nameless variables - too easy for them to clash when reusing
-.tmp2					SKIP 1		; ditto
-.scr_cur_msg_idx		SKIP 1		; current index into scr_message - only used during poll_scr
-.scr_cur_sine_idx		SKIP 1		; current index into sine table - only used during poll_scr
-.scr_y_offset			SKIP 1		; current y offset - only used during poll_scr
+\\ Temporary vars
+.tmp_erase				SKIP 1		; used when erasing rows or pixels
 
+.tmp_col_mask			; SHARED	; scr_init only - used to rotate font glyph data
+.tmp_cur_col			; SHARED	; poll_scr only - current column into font
+.tmp_fx_y				SKIP 1		; poll_fx only - current y value being plotted
+
+.tmp_row_bit			; SHARED	; scr_init only - used to rotate font glyph data
+.tmp_font_byte			SKIP 1		; poll_scr only - current byte of font data
+
+.tmp_msg_idx			SKIP 1		; current index into scr_message - only used during poll_scr
+
+\\ Generic vars
 .writeptr				SKIP 2		; generic write ptr
 .readptr				SKIP 2		; generic read ptr
 
 \\ Scroll text vars
-.scr_sine_idx			SKIP 1		; index into sine wave table
 .scr_msg_idx			SKIP 1		; index into scr_message
 .scr_col				SKIP 1		; current column in first character to be displayed
+.scr_y					SKIP 1		; y coordinate of scroll text
 
-.file_no				SKIP 1
+\\ Loading state vars
+.load_x					SKIP 1		; animated pixel x
+.load_y					SKIP 1		; animated pixel y
+
+\\ App state vars
+.file_no				SKIP 1		; index into our file table
+
+\\ System vars
+.old_eventv				SKIP 2
 
 \ ******************************************************************
 \ *	Start address to be saved
@@ -183,29 +177,50 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 	LDA #22: JSR oswrch
 	LDA #7: JSR oswrch
 
-	\\ Can't remember how to turn off cursor!
+	\\ Must be a simpler way to turn off cursor than this!!
+	LDA #23: JSR oswrch
+	LDA #1: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
+	LDA #0: JSR oswrch
 
 	\\ Load first file in our list
 	LDA #0
+	STA file_no
 	
 \\ ***** Enter loading state ***** \\
 
 	.enter_loading_state
-	STA file_no
-	JSR load_file_from_table
+	\\ Clear screen
+	LDA #12: JSR oswrch
+	JSR teletexel_init
 
-	\\ Returned error
+	\\ Init scrolltext with loading message
+	LDA #LO(load_message):LDX #HI(load_message)
+	LDY #11:JSR init_scr
+
+	\\ Start our event driven fx
+	ldx #LO(load_eventv)
+	ldy #HI(load_eventv)
+	JSR start_eventv
+
+	\\ Blocking file load
+	JSR load_file_from_table
+	PHA							; store return value
+
+	\\ Kill our event driven fx
+	JSR stop_eventv
+
+	\\ Returned error?
+	PLA
 	BNE return
 
 \\ ***** Enter demo state ***** \\
-
-	\\ Initialise exomizer - must have some data ready to decrunch
-	LDX #LO(VGM_stream_data - 1)
-	LDY #HI(VGM_stream_data - 1)
-	JSR init_decruncher
-
-	\\ Initialise music player - consumes first crunched byte
-	JSR	init_player
 
 	\\ Initialise demo state
 	JSR init_demo
@@ -236,11 +251,6 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 		JSR deinit_demo
 	}
 
-\\ ***** Exit demo state ***** \\
-
-	\\ Shutdown music player
-	JSR deinit_player
-	
 \\ ***** Trigger next load ***** \\
 
 	\\ Increment file in table
@@ -251,7 +261,9 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 	LDX #0
 	.next_file
 	STX file_no
-	TXA
+
+\\ ***** Exit demo state ***** \\
+
 	JMP enter_loading_state
 
 	\\ Exit cleanly (we hope)
@@ -266,6 +278,19 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 
 .init_demo
 {
+	\\ Set load and store addresses
+	\\ Is it really necessary to use self-modifying code here?!
+
+	LDA #LO(mode7_screen_data)
+	STA loop+1
+	LDA #HI(mode7_screen_data)
+	STA loop+2
+
+	LDA #LO(MODE7_base_addr)
+	STA loop+4
+	LDA #HI(MODE7_base_addr)
+	STA loop+5
+
 	\\ Initialise MODE 7 screen
 	LDY #0
 	.loop
@@ -280,9 +305,21 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 
 	\\ Initialise our effects
 	JSR init_fx
-	JSR init_scr
 
-	\\ Hook up Event vector
+	LDA #LO(demo_message): LDX #HI(demo_message)
+	LDY #23: JSR init_scr				; top of scroller at Y
+
+	\\ Initialise exomizer - must have some data ready to decrunch
+	LDX #LO(VGM_stream_data - 1)
+	LDY #HI(VGM_stream_data - 1)
+	JSR init_decruncher
+
+	\\ Initialise music player - consumes first crunched byte
+	JSR	init_player
+
+	\\ Hook up Event vector - starts player
+	ldx #LO(demo_eventv)
+	ldy #HI(demo_eventv)
 	JSR start_eventv
 
 	.return
@@ -291,8 +328,10 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 
 .poll_demo
 {
-	\\ Poll our effects
+	\\ Poll our VU effects
 	JSR poll_fx
+
+	\\ Update scrolltext
 	JSR poll_scr
 
 	\\ Poll the music player
@@ -304,11 +343,35 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 
 .deinit_demo
 {
-	\\ Unhook Event vector
+	\\ Unhook Event vector - stops player
 	JSR stop_eventv
 
+	\\ Shutdown music player - silences all audio channels
+	JSR deinit_player
+	
 	.return
 	RTS
+}
+
+.demo_eventv
+{
+	php
+	cmp #4
+	bne not_vsync
+
+	\\ Preserve registers
+	pha:TXA:PHA:TYA:PHA
+
+	\\ Poll the music player
+	jsr poll_player
+
+	\\ Restore registers
+	PLA:TAY:PLA:TAX:pla
+
+	\\ Return
+    .not_vsync
+	plp
+	rts
 }
 
 
@@ -316,10 +379,12 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 \ *	File loading routines
 \ ******************************************************************
 
-.load_file_from_table			; A = index into our table
+.load_file_from_table			; flle_no = index into our table
 {
+	LDA file_no
 	ASL A:TAX
 
+	\\ Set osfile param block
 	LDA loading_table,X
 	STA osfile_params + 0
 	LDA loading_table+1,X
@@ -333,14 +398,67 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 	LDA #0
 	STA osfile_params + 6
 
+	\\ Issue osfile call
 	LDX #LO(osfile_params)
 	LDY #HI(osfile_params)
 	LDA #&FF
 	JSR osfile
 
-	LDA #0
+	\\ Error?
+	LDA #0						; should return whether error occurred
 	.return
 	RTS
+}
+
+.load_eventv
+{
+	php
+	cmp #4
+	beq vsync
+	JMP not_vsync
+
+	.vsync
+	\\ Preserve registers
+	pha:TXA:PHA:TYA:PHA
+
+\\ ***** Loading FX ***** \\
+
+\\ Must be cheap otherwise will callback will re-enter!
+
+	\\ Remove old pixel
+	LDX load_x
+	LDY load_y
+	JSR teletexel_erase
+
+	\\ Update pixel pos - just move left to right, top to bottom
+	LDX load_x
+	LDY load_y
+	INX:INX
+	CPX #MODE7_texel_width
+	BCC no_wrapx
+	INY:INY
+	CPY #MODE7_texel_height
+	BCC no_wrapy
+	LDY #0
+	.no_wrapy
+	STY load_y
+	LDX #0
+	.no_wrapx
+	STX load_x
+	
+	\\ Draw new pixel
+	JSR teletexel_plot
+
+	\\ Poll scroll
+	JSR poll_scr
+	
+	\\ Restore registers
+	PLA:TAY:PLA:TAX:pla
+
+	\\ Return
+    .not_vsync
+	plp
+	rts
 }
 
 
@@ -385,7 +503,7 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 
 .teletexel_erase_row				; row Y, start X, end A
 {
-	STA tmp
+	STA tmp_erase
 
 	LDA mode7_row_addr_LO,Y
 	STA loop+1
@@ -396,7 +514,7 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 	.loop
 	STA MODE7_base_addr,X			; **SELF-MODIFIED CODE**
 	INX
-	CPX tmp
+	CPX tmp_erase
 	BNE loop
 
 	.return
@@ -470,10 +588,10 @@ ENDMACRO
 	TELETEXEL_CALC_WRITEPTR_AND_MASK
 
 	EOR #&FF										; flip the bits
-	STA tmp
+	STA tmp_erase
 	LDY #0											; 2c
 	LDA (writeptr),Y								; 6c
-	AND tmp
+	AND tmp_erase
 	STA (writeptr),Y								; 6c
 
 	.return
@@ -482,192 +600,119 @@ ENDMACRO
 
 
 \ ******************************************************************
-\ *	Dodgy scrolltext code
+\ *	Scrolltext code
+\ * Redraws entire message each frame
+\ * Only scrolls with byte precision, i.e. two pixels per frame
+\ * This is too fast for a 5x5 pixel font
+\ * TODO - rewrite to be single pixel scroll
 \ ******************************************************************
 
-.init_scr
+.init_scr			; Y = y pos drawn at, A, X = address of message
 {
+	\\ Set address of message
+	STA poll_scr_msg_addr_1+1
+	STA poll_scr_msg_addr_2+1
+	STX poll_scr_msg_addr_1+2
+	STX poll_scr_msg_addr_2+2
+
+	\\ Set address that scrolltext drawn to
+	STY scr_y
+	LDA mode7_row_addr_LO,Y
+	STA poll_scr_line_1_addr+1
+	LDA mode7_row_addr_HI,Y
+	STA poll_scr_line_1_addr+2
+	INY
+	LDA mode7_row_addr_LO,Y
+	STA poll_scr_line_2_addr+1
+	LDA mode7_row_addr_HI,Y
+	STA poll_scr_line_2_addr+2
+
 	LDA #0
 	STA scr_msg_idx
-	STA scr_sine_idx
 	STA scr_col
-
-	\\ Generate font data
-	\\ Rather use predefined font!
-
-	LDA #LO(font_data)
-	STA writeptr
-	LDA #HI(font_data)
-	STA writeptr+1
-
-	LDX #FONT_first_glyph
-	.loop
-	STX font_charreq
-	
-	\\ Set up OSWORD call to obtain character definition
-	LDX #LO(font_charreq)
-	LDY #HI(font_charreq)
-	LDA #&A
-	JSR osword				; osword call
-	
-	\\ Rotate
-	LDY #0					; index into our write buffer
-	LDA #&80				; mask for char column, start top bit set
-	STA tmp
-
-	.rowtocol
-	LDA #1					; mask for fb col byte, start bottom bit set
-	STA tmp2
-
-	LDA #0
-	STA (writeptr),Y		; blank fb col byte first
-
-	LDX #0
-	.rowtoloop
-	LDA tmp					; load mask for column
-	AND font_chardef,X		; mask against char row
-	BEQ norowbit
-
-	LDA (writeptr),Y		; load existing fb byte
-	ORA tmp2				; mask in our bit
-	STA (writeptr),Y		; store back
-
-	.norowbit
-	ASL tmp2				; next bit in fb mask
-	INX
-	CPX #8
-	BNE rowtoloop
-
-	INY						; next fb row
-	
-	LSR tmp					; shift char mask right
-	BNE rowtocol			; until zero
-	
-	.endofloop
-	CLC
-	LDA writeptr
-	ADC #8
-	STA writeptr
-	LDA writeptr+1
-	ADC #0
-	STA writeptr+1
-
-	LDX font_charreq
-	INX
-	CPX #FONT_last_glyph+1
-	BNE loop
 
 	.return
 	RTS
 }
 
 .poll_scr
-{
-	\\ Crappy screen clear
-	LDY #SCR_draw_at_row + 0: LDX #2: LDA #40: JSR teletexel_erase_row
-	LDY #SCR_draw_at_row + 1: LDX #2: LDA #40: JSR teletexel_erase_row
-	LDY #SCR_draw_at_row + 2: LDX #2: LDA #40: JSR teletexel_erase_row
-
+\\{
+	\\ Copy our temp variables for drawing
 	LDA scr_col
-	STA tmp						; current column in font
+	STA tmp_cur_col				; current column in font
 
 	LDA scr_msg_idx
-	STA scr_cur_msg_idx			; current index into message
+	STA tmp_msg_idx				; current index into message
 
-	LDA scr_sine_idx
-	STA scr_cur_sine_idx
+	\\ Loop over characters in row
+	LDX #2						; X char position - ignore first two
+	.poll_scr_xloop
 
-	LDX #0						; X coord on screen
-	.xloop
+	LDY tmp_msg_idx
+	.poll_scr_msg_addr_1
+	LDA demo_message,Y			; actually contains the offset into font data
+	BNE poll_scr_not_end_of_msg			; finish if zero
 
-	LDY scr_cur_msg_idx
-	LDA scr_message,Y			; load current char from message
-	BNE continue				; finish if zero
+	LDY #0
+	STY tmp_msg_idx
+	BEQ poll_scr_msg_addr_1
 
-	LDA #0
-	STA scr_cur_msg_idx
-	JMP xloop					; wrap
-
-	.continue
-	SEC
-	SBC #FONT_first_glyph		; map to our font data
-	TAY
-
-	LDA font_data_addr_LO,Y
-	STA readptr
-	LDA font_data_addr_HI,Y
-	STA readptr+1				; look up address of font data
-
-	.colloop
-	LDY scr_cur_sine_idx
-	LDA scr_sine_table,Y
-	STA scr_y_offset
-	INY:INY						; increment into sine table for each column
-	STY scr_cur_sine_idx
-
-	LDY tmp						; current column
-	LDA (readptr),Y				; full column of bits
-	STA tmp2					; font slice
-
-	LDY #0						; Y coord on screen
-	.rowloop
-	LDA tmp2
-	AND #&1
-	BEQ zero					; no pixel
-
-	TYA:PHA
+	.poll_scr_not_end_of_msg
+	\\ Work out which column we're on
 	CLC
-	ADC scr_y_offset			
+	ADC tmp_cur_col
 	TAY
-	JSR teletexel_plot			; plot pixel at X, Y		- destroys A,X and writeptr
-	PLA:TAY
 
-	.zero
-	LSR tmp2					; next pixel
+	\\ Draw a column of the font to the screen
+	.poll_scr_draw_col
+	LDA mode7_font_data,Y
+	.poll_scr_line_1_addr
+	STA &7C00,X
+
+	LDA mode7_font_data + 40,Y
+	.poll_scr_line_2_addr
+	STA &7C28,X
+
+	\\ Next screen column
+	INX
+	CPX #MODE7_char_width
+	BEQ poll_scr_done
+
+	\\ Next font column
 	INY
-	CPY #8
-	BNE rowloop					; do this for all 8 pixels
 
-	INX							; next column on screen
-	CPX #MODE7_texel_width
-	BEQ done
+	INC tmp_cur_col
+	LDA tmp_cur_col
+	CMP #3
+	BNE poll_scr_draw_col
 
-	INC tmp						; next column in font data
-	LDA tmp
-	CMP #8
-	BNE colloop					; until done whole char
+	\\ Done all columns
+	LDY #0
+	STY tmp_cur_col
 
-	LDA #0
-	STA tmp
+	INC tmp_msg_idx				; next letter
 
-	INC scr_cur_msg_idx			; next char in scr_message
-	JMP xloop
+	JMP poll_scr_xloop
 
-	.done
+	.poll_scr_done
 	INC scr_col					; increment column for scroll
 	LDA scr_col
-	CMP #8
-	BNE return					; 8 columns
+	CMP #3
+	BNE poll_scr_return					; 8 columns
 
 	LDA #0
 	STA scr_col					; reset column
 	INC scr_msg_idx				; next char in scr_message
 
 	LDY scr_msg_idx
-	LDA scr_message,Y
-	BNE return
+	.poll_scr_msg_addr_2
+	LDA demo_message,Y
+	BNE poll_scr_return
+	STA scr_msg_idx
 
-	LDA #0
-	STA scr_msg_idx				; wrap at end of scr_message
-
-	.return
-	INC scr_sine_idx
-	INC scr_sine_idx
-	INC scr_sine_idx
-	INC scr_sine_idx			; increment into sine table each frame
-
+	.poll_scr_return
 	RTS
-}
+\\}
 
 
 \ ******************************************************************
@@ -702,7 +747,7 @@ ENDMACRO
 	DEY
 	BPL loop
 
-	\\ TODO - rewrite this whole thing to only plot changes in columns
+	\\ TODO - rewrite this whole thing to only plot changes in columns!
 
 	\\ Crappy screen clear
 	LDY #FX_draw_at_row - 4: LDX #3: LDA #37: JSR teletexel_erase_row
@@ -713,24 +758,24 @@ ENDMACRO
 
 	\\ Start at value 14 and work down
 	LDA #14
-	STA tmp
+	STA tmp_fx_y
 
 	.yloop
-	LDX #68									; draw from x coordinate starting 68
+	LDX #FX_draw_end_x						; draw from x coordinate starting 68
 	LDY #0
 
 	\\ For each frequency value
 	.xloop
 	LDA freq_array,Y
 	BEQ empty
-	CMP tmp
+	CMP tmp_fx_y
 	BCC empty
 
 	\\ Plot if >= to our current tmp value
 	TYA:PHA
 	SEC
 	LDA #(FX_draw_at_row * 3) + 2			; bottom y coordinate
-	SBC tmp
+	SBC tmp_fx_y
 	TAY
 
 	JSR teletexel_plot						; only X is preserved
@@ -743,7 +788,7 @@ ENDMACRO
 	CPY #FX_num_freqs
 	BNE xloop
 
-	DEC tmp
+	DEC tmp_fx_y
 	BMI done
 
 	JMP yloop
@@ -910,7 +955,7 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 \ *	Event Vector Routines
 \ ******************************************************************
 
-.start_eventv
+.start_eventv				; new event handler in X,Y
 {
 	\\ Remove interrupt instructions
 	lda #NOP_OP
@@ -919,10 +964,13 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	
 	\\ Set new Event handler
 	sei
-	lda #LO(eventv_handler)
-	sta EVENTV
-	lda #HI(eventv_handler)
-	sta EVENTV+1
+	LDA EVENTV
+	STA old_eventv
+	LDA EVENTV+1
+	STA old_eventv+1
+
+	stx EVENTV
+	sty EVENTV+1
 	cli
 	
 	\\ Enable VSYNC event.
@@ -939,32 +987,19 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	ldx #4
 	jsr osbyte
 
+	\\ Reset old Event handler
+	SEI
+	LDA old_eventv
+	STA EVENTV
+	LDA old_eventv+1
+	STA EVENTV+1
+	CLI 
+
 	\\ Insert interrupt instructions back
 	lda #SEI_OP
 	sta PSG_STROBE_SEI_INSN
 	lda #CLI_OP
 	sta PSG_STROBE_CLI_INSN
-	rts
-}
-
-.eventv_handler
-{
-	php
-	cmp #4
-	bne not_vsync
-
-	\\ Preserve registers
-	pha:TXA:PHA:TYA:PHA
-
-	\\ Poll the music player
-	jsr poll_player
-
-	\\ Restore registers
-	PLA:TAY:PLA:TAX:pla
-
-	\\ Return
-    .not_vsync
-	plp
 	rts
 }
 
@@ -1295,25 +1330,100 @@ EQUB LO(vgm_filename_2): EQUB HI(vgm_filename_2)
 EQUB LO(vgm_filename_3): EQUB HI(vgm_filename_3)
 EQUB LO(vgm_filename_4): EQUB HI(vgm_filename_4)
 
-.scr_message
-EQUS "BeebTracker scrolltext in the wrong place! 0123456789... "
-EQUB 0
-
 .vgm_filename_1
-EQUS "master"
-EQUB 13
+EQUS "master", 13
 
 .vgm_filename_2
-EQUS "except"
-EQUB 13
+EQUS "except", 13
 
 .vgm_filename_3
-EQUS "fluid"
-EQUB 13
+EQUS "fluid", 13
 
 .vgm_filename_4
-EQUS "ice"
-EQUB 13
+EQUS "ice", 13
+
+\\ Map character ASCII values to the byte offset into our MODE 7 font
+\\ This is "cunning" but only works because the font has fewer than 256/6 (42) glyphs..
+
+MAPCHAR 'A', 1
+MAPCHAR 'B', 4
+MAPCHAR 'C', 7
+MAPCHAR 'D', 10
+MAPCHAR 'E', 13
+MAPCHAR 'F', 16
+MAPCHAR 'G', 19
+MAPCHAR 'H', 22
+MAPCHAR 'I', 25
+MAPCHAR 'J', 28
+MAPCHAR 'K', 31
+MAPCHAR 'L', 34
+MAPCHAR 'M', 37
+
+MAPCHAR 'a', 1
+MAPCHAR 'b', 4
+MAPCHAR 'c', 7
+MAPCHAR 'd', 10
+MAPCHAR 'e', 13
+MAPCHAR 'f', 16
+MAPCHAR 'g', 19
+MAPCHAR 'h', 22
+MAPCHAR 'i', 25
+MAPCHAR 'j', 28
+MAPCHAR 'k', 31
+MAPCHAR 'l', 34
+MAPCHAR 'm', 37
+
+MAPCHAR 'N', 81
+MAPCHAR 'O', 84
+MAPCHAR 'P', 87
+MAPCHAR 'Q', 90
+MAPCHAR 'R', 93
+MAPCHAR 'S', 96
+MAPCHAR 'T', 99
+MAPCHAR 'U', 102
+MAPCHAR 'V', 105
+MAPCHAR 'W', 108
+MAPCHAR 'X', 111
+MAPCHAR 'Y', 114
+MAPCHAR 'Z', 117
+
+MAPCHAR 'n', 81
+MAPCHAR 'o', 84
+MAPCHAR 'p', 87
+MAPCHAR 'q', 90
+MAPCHAR 'r', 93
+MAPCHAR 's', 96
+MAPCHAR 't', 99
+MAPCHAR 'u', 102
+MAPCHAR 'v', 105
+MAPCHAR 'w', 108
+MAPCHAR 'x', 111
+MAPCHAR 'y', 114
+MAPCHAR 'z', 117
+
+MAPCHAR '0', 161
+MAPCHAR '1', 164
+MAPCHAR '2', 167
+MAPCHAR '3', 170
+MAPCHAR '4', 173
+MAPCHAR '5', 176
+MAPCHAR '6', 179
+MAPCHAR '7', 182
+MAPCHAR '8', 185
+MAPCHAR '9', 188
+MAPCHAR '?', 191
+MAPCHAR '!', 194
+MAPCHAR '.', 197
+
+MAPCHAR ' ', 241
+
+\\ Scrolltext messages stored as font glyph byte offsets
+
+.demo_message
+EQUS "BeebTracker scrolltext in the right place but now too fast! Needs to be one pixel scroll not one byte. 0123456789?!. ", 0
+
+.load_message
+EQUS "Loading... ", 0
 
 
 \ ******************************************************************
@@ -1359,30 +1469,16 @@ FOR n, 0, MODE7_texel_height-1, 1
 	ENDIF
 NEXT
 
-\\ Lookup font data for each char
-.font_data_addr_LO
-FOR n, 0, FONT_num_glyphs, 1
-EQUB LO(font_data + n * 8)
-NEXT
-
-.font_data_addr_HI
-FOR n, 0, FONT_num_glyphs, 1
-EQUB HI(font_data + n * 8)
-NEXT
-
-\\ Dodgy sine wave table
-.scr_sine_table
-FOR n, 0, 255, 1
-EQUB SCR_draw_at_row * 3 + SCR_sine_amp * SIN(n * PI / 64)
-NEXT
-
 
 \ ******************************************************************
 \ *	MODE 7 screen data
 \ ******************************************************************
 
 .mode7_screen_data
-INCBIN "screen2.mode7"
+INCBIN "screen3.mode7"
+
+.mode7_font_data
+INCBIN "font_5x5.mode7"
 
 \ ******************************************************************
 \ *	End address to be saved
@@ -1397,20 +1493,11 @@ INCBIN "screen2.mode7"
 
 \\ Exomiser unpack buffer (must be page aligned)
 ALIGN &100
-.EXO_buffer_start
-SKIP EXO_buffer_len
+.EXO_buffer_start		SKIP EXO_buffer_len
 .EXO_buffer_end
 
 \\ Frequency array for vu-meter effect
-.freq_array
-SKIP FX_num_freqs
-
-\\ Temporary workspace for character conversion
-.font_charreq			SKIP 1			; character definition required
-.font_chardef			SKIP 8			; character definition bytes
-
-.font_data
-SKIP					8 * FONT_num_glyphs
+.freq_array				SKIP FX_num_freqs
 
 .osfile_params			SKIP 18
 
@@ -1435,3 +1522,5 @@ PUTFILE "fluid_beeb_50.raw.exo", "fluid", 0
 PUTFILE "ice_opt_beeb_50_raw.exo", "ice", 0
 PUTFILE "exception_beeb.raw.exo", "except", 0
 PUTFILE "master_beeb.raw.exo", "master", 0
+PUTFILE "font_5x5.mode7", "font", &7C00
+PUTFILE "menu_overlay.mode7", "menu", &7C00
