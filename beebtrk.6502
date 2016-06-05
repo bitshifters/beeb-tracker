@@ -1469,6 +1469,14 @@ FOR n, 0, MODE7_texel_height-1, 1
 	ENDIF
 NEXT
 
+\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
+\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
+ALIGN &100
+.note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
+.note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
+.note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
+
+
 
 \ ******************************************************************
 \ *	MODE 7 screen data
