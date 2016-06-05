@@ -128,9 +128,20 @@ FONT_num_glyphs = FONT_last_glyph - FONT_first_glyph + 1
 
 NUM_vgm_files = 4				; size of our file table
 
-FX_num_freqs = 64
+FX_num_freqs = 16				; can be 16 or 32
 FX_draw_at_row = 12				; bottom of vu meter (row)
 FX_draw_end_x = 68				; right of vu meter (pixel)
+
+FX_chr_x = 4
+FX_chr_y = 8
+FX_chr_w = 32
+FX_chr_h = 5
+FX_address = &7C00 + FX_chr_y*40 + FX_chr_x
+FX_address_row0 = FX_address
+FX_address_row1 = FX_address_row0 + 40
+FX_address_row2 = FX_address_row1 + 40
+FX_address_row3 = FX_address_row2 + 40
+FX_address_row4 = FX_address_row3 + 40
 
 \\ Tracker screen setup
 TRACKER_lineno_field_xpos = 4
@@ -179,6 +190,7 @@ GUARD &9F
 .player_reg_bits		SKIP 1		; bits 0 - 7 set if SN register 0 - 7 updated this frame, cleared at start of player poll
 
 \\ Temporary vars
+.tmp_var				; SHARED	; free for any function to use but not preserved across subroutines
 .tmp_erase				SKIP 1		; used when erasing rows or pixels
 
 .tmp_col_mask			; SHARED	; scr_init only - used to rotate font glyph data
@@ -801,12 +813,113 @@ ENDMACRO
 	DEY
 	BPL loop
 
+	\\ hacky code to clear off the rogue bars left + right
+	\\ better solution is to clean up screen layout
+	LDX #0
+	LDA #32
+	STA FX_address_row0-1, X
+	STA FX_address_row1-1, X
+	STA FX_address_row2-1, X
+	STA FX_address_row3-1, X
+	STA FX_address_row4-1, X
+	STA FX_address_row4-1, X
+	LDX #FX_chr_w+1
+	STA FX_address_row0-1, X
+	STA FX_address_row1-1, X
+	STA FX_address_row2-1, X
+	STA FX_address_row3-1, X
+	STA FX_address_row4-1, X
+	STA FX_address_row4-1, X
+	
 	.return
 	RTS
 }
 
 .poll_fx
 {
+
+	\\ render the bar fx in 15 by 5 character columns
+	LDX #0
+	
+	.fx_column_loop
+	
+	\\ get frequency level
+	TXA
+	
+IF FX_num_freqs == 16
+	LSR A
+ENDIF
+
+	TAY
+	LDA freq_array, Y
+	
+	CLC
+	ADC #1			; this hack forces levels to be a minimum of 1
+					; which means there's always a green bar showing
+					; fx_table lookup has a duplicated extra entry to prevent overread
+	
+	\\ mult*5 and lookup teletext bar graphic
+	STA tmp_fx_y
+	ASL A
+	ASL A
+	CLC
+	ADC tmp_fx_y
+	TAY
+	
+IF FX_num_freqs == 16
+	\\ render the 5 byte bar column, 2 chrs per bar, 2nd bar has right hand column removed
+	LDA fx_table + 4, Y
+	STA FX_address_row0+0, X
+	AND #&B5
+	STA FX_address_row0+1, X
+	LDA fx_table + 3, Y
+	STA FX_address_row1+0, X
+	AND #&B5
+	STA FX_address_row1+1, X
+	LDA fx_table + 2, Y
+	STA FX_address_row2+0, X
+	AND #&B5
+	STA FX_address_row2+1, X
+	LDA fx_table + 1, Y
+	STA FX_address_row3+0, X
+	AND #&B5
+	STA FX_address_row3+1, X
+	LDA fx_table + 0, Y
+	STA FX_address_row4+0, X
+	AND #&B5
+	STA FX_address_row4+1, X
+	\\ advance to next column
+	INX
+	INX
+	TXA
+	CMP #FX_num_freqs*2
+ELSE
+	\\ render the 5 byte bar column, 1 chr per bar
+	LDA fx_table + 4, Y
+	AND #&B5
+	STA FX_address_row0+0, X
+	LDA fx_table + 3, Y
+	AND #&B5
+	STA FX_address_row1+0, X
+	LDA fx_table + 2, Y
+	AND #&B5
+	STA FX_address_row2+0, X
+	LDA fx_table + 1, Y
+	AND #&B5
+	STA FX_address_row3+0, X
+	LDA fx_table + 0, Y
+	AND #&B5
+	STA FX_address_row4+0, X
+	\\ advance to next column
+	INX
+	TXA
+	CMP #FX_num_freqs
+ENDIF
+
+
+	BNE fx_column_loop
+
+
 	\\ Let values fall to zero
 	LDY #FX_num_freqs - 1
 	.loop
@@ -818,53 +931,6 @@ ENDMACRO
 	.zero
 	DEY
 	BPL loop
-
-	\\ TODO - rewrite this whole thing to only plot changes in columns!
-
-	\\ Crappy screen clear
-	LDY #FX_draw_at_row - 4: LDX #3: LDA #37: JSR teletexel_erase_row
-	LDY #FX_draw_at_row - 3: LDX #3: LDA #37: JSR teletexel_erase_row
-	LDY #FX_draw_at_row - 2: LDX #3: LDA #37: JSR teletexel_erase_row
-	LDY #FX_draw_at_row - 1: LDX #3: LDA #37: JSR teletexel_erase_row
-	LDY #FX_draw_at_row - 0: LDX #3: LDA #37: JSR teletexel_erase_row
-
-	\\ Start at value 14 and work down
-	LDA #14
-	STA tmp_fx_y
-
-	.yloop
-	LDX #FX_draw_end_x						; draw from x coordinate starting 68
-	LDY #0
-
-	\\ For each frequency value
-	.xloop
-	LDA freq_array,Y
-	BEQ empty
-	CMP tmp_fx_y
-	BCC empty
-
-	\\ Plot if >= to our current tmp value
-	TYA:PHA
-	SEC
-	LDA #(FX_draw_at_row * 3) + 2			; bottom y coordinate
-	SBC tmp_fx_y
-	TAY
-
-	JSR teletexel_plot						; only X is preserved
-	PLA:TAY
-
-	\\ Otherwise don't plot
-	.empty
-	DEX
-	INY
-	CPY #FX_num_freqs
-	BNE xloop
-
-	DEC tmp_fx_y
-	BMI done
-
-	JMP yloop
-	.done
 	
 	.return
 	RTS
@@ -1430,8 +1496,20 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	LDY player_last_reg
 	STA player_channel_vals,Y
 
-	\\ If we have some frequency data spike our freq array
-	LSR A: LSR A
+IF FX_num_freqs == 16
+	\\ 16 frequency bars, so use top 4 bits
+	LSR A : LSR A
+ELSE
+	\\ 32 frequency bars, so use top 5 bits
+	LSR A
+ENDIF
+	
+	\\ clamp final frequency to array range and invert 
+	AND #FX_num_freqs-1
+	STA tmp_var
+	LDA #FX_num_freqs-1
+	SEC
+	SBC tmp_var
 	TAX
 	LDA #15
 	STA freq_array,X
@@ -1990,6 +2068,87 @@ EQUS "BeebTracker scrolltext in the right place but now too fast! Needs to be on
 EQUS "Loading... ", 0
 
 \\ ** ANY EQUS LINES AFTER THIS POINT WILL STILL CONTAIN REMAPPED CHARACTERS ** \\
+
+\ ******************************************************************
+\ *	Look up tables
+\ ******************************************************************
+
+\\ Start address of each row in MODE 7 - wasteful but helpful
+.mode7_row_addr_LO
+FOR n, 0, MODE7_char_height-1, 1
+EQUB LO(MODE7_base_addr + n * MODE7_char_width)
+NEXT
+
+.mode7_row_addr_HI
+FOR n, 0, MODE7_char_height-1, 1
+EQUB HI(MODE7_base_addr + n * MODE7_char_width)
+NEXT
+
+\\ Lookup byte address for a given teletexel y coordinate - wasteful but fast
+.mode7_texel_y_to_row_addr_LO
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB LO(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
+NEXT
+
+.mode7_texel_y_to_row_addr_HI
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB HI(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
+NEXT
+
+\\ Lookup bit mask for a given teletexel y coordinate - wasteful but fast
+.mode7_texel_lookup_x_even
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB 1 << ((n % 3) * 2)
+NEXT
+
+.mode7_texel_lookup_x_odd
+FOR n, 0, MODE7_texel_height-1, 1
+	IF (n % 3) = 0
+		EQUB 2
+	ELIF (n % 3) = 1
+		EQUB 8
+	ELSE
+		EQUB 64			; stupid teletext spec
+	ENDIF
+NEXT
+
+\\ 16 Arrangements of 5 teletext character bytes to render a vertical equalizer bar
+.fx_table
+EQUB 160, 160, 160, 160, 160
+EQUB 160+80, 160, 160, 160, 160
+EQUB 160+92, 160, 160, 160, 160
+EQUB 160+95, 160, 160, 160, 160
+EQUB 160+95, 160+80, 160, 160, 160
+EQUB 160+95, 160+92, 160, 160, 160
+EQUB 160+95, 160+95, 160, 160, 160
+EQUB 160+95, 160+95, 160+80, 160, 160
+EQUB 160+95, 160+95, 160+92, 160, 160
+EQUB 160+95, 160+95, 160+95, 160, 160
+EQUB 160+95, 160+95, 160+95, 160+80, 160
+EQUB 160+95, 160+95, 160+95, 160+92, 160
+EQUB 160+95, 160+95, 160+95, 160+95, 160
+EQUB 160+95, 160+95, 160+95, 160+95, 160+80
+EQUB 160+95, 160+95, 160+95, 160+95, 160+92
+EQUB 160+95, 160+95, 160+95, 160+95, 160+95
+EQUB 160+95, 160+95, 160+95, 160+95, 160+95	; last row copied to enable fixed bar effect
+
+\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
+\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
+ALIGN &100
+.note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
+.note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
+.note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
+
+
+\ ******************************************************************
+\ *	MODE 7 screen data
+\ ******************************************************************
+
+.mode7_screen_data
+INCBIN "screen3.mode7"
+
+.mode7_font_data
+INCBIN "font_5x5.mode7"
 
 \ ******************************************************************
 \ *	End address to be saved
