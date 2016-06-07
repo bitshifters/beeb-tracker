@@ -6,13 +6,13 @@ Infrastructure
 - Multiple source files (demo, player, exo) for library reuse
 
 VGM Pre-process & Player
-- Track length in metadata for tune progress
-- Track speed in metadata for tracker update?
-- Mapping from sound data to note notation for tracker (c#3f etc.)
+- Track length in metadata for tune progress (SM)
+- Track speed in metadata for tracker update? (SM)
+- Mapping from sound data to note notation for tracker (c#3f etc.) (SM)
 - Ability to look ahead into sound data for upcoming tracker
-- Song name & author metadata <- in VGM file or embedded in demo code?
+- Song name & author metadata <- in VGM file or embedded in demo code? (SM)
 - Support for looping tracks?
-- Better extraction of frequency & beat data from tune for fx
+- Better extraction of frequency & beat data from tune for fx - GOOD ENOUGH! DONE
 
 Scroll text FX
 - Smaller font ~ 6x6 pixels per letter - DONE
@@ -21,13 +21,13 @@ Scroll text FX
 - Ability to set scroll text message - DONE
 
 VU FX
-- Rewrite to only update changed teletexels not redraw entirely each frame
+- Rewrite to only update changed teletexels not redraw entirely each frame - DONE
 - Any changes to FX in general?
 - Hook up to improved frequency & beat extraction
 
 Tracker FX
 - Write tracker display routine!
-- Timer display routine
+- Timer display routine (SM)
 
 Loader FX
 - Static MODE 7 screen at minimum
@@ -50,7 +50,7 @@ Main Loop
 - (Would be nice if menu could overlay running tracker?)
 - Cleanly kill & restart player - DONE
 - Loader for VGM files - DONE
-- Where is metadata for files etc. stored?
+- Where is metadata for files etc. stored? - SM: Stuff into RAW file I think?
 - (Compile time configuration from a file)
 - Optimise draw routines for raster
 
