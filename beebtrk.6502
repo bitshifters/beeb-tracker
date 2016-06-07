@@ -128,7 +128,8 @@ FONT_num_glyphs = FONT_last_glyph - FONT_first_glyph + 1
 
 NUM_vgm_files = 4				; size of our file table
 
-FX_num_freqs = 16				; can be 16 or 32
+FX_num_freqs = 16				; number of VU bars - can be 16 or 32
+FX_num_channels = 4				; number of beat bars (one per channel)
 FX_draw_at_row = 12				; bottom of vu meter (row)
 FX_draw_end_x = 68				; right of vu meter (pixel)
 
@@ -142,6 +143,13 @@ FX_address_row1 = FX_address_row0 + 40
 FX_address_row2 = FX_address_row1 + 40
 FX_address_row3 = FX_address_row2 + 40
 FX_address_row4 = FX_address_row3 + 40
+
+\\ Channel beat bar locations - beat bars are 3 chrs high
+FX_address_beat = &7C00 + 40*14
+FX_ch0_x = 10
+FX_ch1_x = 17
+FX_ch2_x = 24
+FX_ch3_x = 31
 
 \\ Tracker screen setup
 TRACKER_lineno_field_xpos = 4
@@ -805,8 +813,9 @@ ENDMACRO
 
 .init_fx
 {
-	\\ Initialise the frequency array
-	LDY #FX_num_freqs - 1
+	\\ Initialise the frequency array & beat bar array
+	\\ freq_array is followed by chan_array, so we can process all together
+	LDY #(FX_num_freqs+FX_num_channels) - 1
 	LDA #0
 	.loop
 	STA freq_array,Y
@@ -832,6 +841,32 @@ ENDMACRO
 	STA FX_address_row4-1, X
 	
 	.return
+	RTS
+}
+
+\\ Render a 3 character high graphic beat bar
+\\ A is the channel, X is the char offset
+.draw_beat_bar
+{
+	TAY
+	LDA chan_array, Y
+	CLC
+	ADC #1
+	STA tmp_fx_y
+	ASL A
+	ASL A
+	CLC
+	ADC tmp_fx_y
+	TAY
+	
+	\\ render a 3 byte bar column, 1 chr per bar
+	LDA fx_table + 2, Y
+	STA FX_address_beat+0, X
+	LDA fx_table + 1, Y
+	STA FX_address_beat+40, X
+	LDA fx_table + 0, Y
+	STA FX_address_beat+80, X
+
 	RTS
 }
 
@@ -919,9 +954,26 @@ ENDIF
 
 	BNE fx_column_loop
 
+	\\ Render the channel beat bars
+	LDA #0
+	LDX #FX_ch0_x
+	JSR draw_beat_bar
+	LDA #1
+	LDX #FX_ch1_x
+	JSR draw_beat_bar
+	LDA #2
+	LDX #FX_ch2_x
+	JSR draw_beat_bar
+	LDA #3
+	LDX #FX_ch3_x
+	JSR draw_beat_bar
 
-	\\ Let values fall to zero
-	LDY #FX_num_freqs - 1
+
+	
+	
+	
+	\\ Let VU meter values fall to zero
+	LDY #(FX_num_freqs) - 1
 	.loop
 	LDA freq_array,Y
 	BEQ zero
@@ -931,6 +983,23 @@ ENDIF
 	.zero
 	DEY
 	BPL loop
+	
+	\\ Beat bars decay 2x faster
+	LDY #(FX_num_channels) - 1
+	.loop2
+	LDA chan_array,Y
+	BEQ zero2
+	SEC
+	SBC #1
+	STA chan_array,Y
+	BEQ zero2
+	SEC
+	SBC #1
+	STA chan_array,Y	
+	.zero2
+	DEY
+	BPL loop2
+	
 	
 	.return
 	RTS
@@ -1437,7 +1506,9 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 
 	\\ First byte
 
-	\\ Obtain register field
+	\\ Obtain register fields
+	
+	\\ Get channel from bits 7,6
 	LDA player_data
 	AND #SN_REG_MASK
 	LSR A:LSR A:LSR A:LSR A
@@ -1478,7 +1549,7 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	AND #(SN_NF_MASK OR SN_FB_MASK)		; store noise freq data
 	STA player_channel_vals,Y
 
-	JMP return
+	JMP trigger_beat
 
 	.tone_channel
 	LDA player_data
@@ -1486,6 +1557,12 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	LSR A: LSR A						; lose bottom 2 bits
 	ORA player_channel_vals,Y			; combine with top 6 bits
 	STA player_channel_vals,Y
+
+	.trigger_beat
+	\\ trigger the beat effect for this channel
+	TYA:ASL A:TAY
+	LDA #9
+	STA chan_array, Y
 
 	JMP return
 
@@ -1496,6 +1573,12 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	ASL A: ASL A						; put 6 bits to top of byte
 	LDY player_last_reg
 	STA player_channel_vals,Y
+
+	\\ trigger the beat effect for this channel
+	TYA:ASL A:TAY
+; technically correct, but better visuals without this.
+;	LDA #9
+;	STA chan_array, Y
 
 	LDA tmp_var
 IF FX_num_freqs == 16
@@ -2103,8 +2186,10 @@ INCBIN "font_5x5.mode7"
 \ *	Space reserved for runtime buffers not preinitialised
 \ ******************************************************************
 
-\\ Frequency array for vu-meter effect
+\\ Frequency array for vu-meter effect, plus beat bars for 4 channels
+\\ These two must be contiguous in memory
 .freq_array				SKIP FX_num_freqs
+.chan_array				SKIP FX_num_channels
 
 \\ Params block for osfile command
 .osfile_params			SKIP 18
