@@ -24,6 +24,49 @@ SEI_OP = $78
 CLI_OP = $58
 NOP_OP = $ea
 
+\\ SN Register Values
+SN_REG_MASK = &70
+SN_REG_TONE3_FREQ = 0
+SN_REG_TONE3_VOL = 1
+SN_REG_TONE2_FREQ = 2
+SN_REG_TONE2_VOL = 3
+SN_REG_TONE1_FREQ = 4
+SN_REG_TONE1_VOL = 5
+SN_REG_NOISE_CTRL = 6
+SN_REG_NOISE_VOL = 7
+SN_REG_MAX = 8
+
+\\ SN Register Bit-field
+SN_BIT_TONE3_FREQ = &01
+SN_BIT_TONE3_VOL = &02
+SN_BIT_TONE2_FREQ = &04
+SN_BIT_TONE2_VOL = &08
+SN_BIT_TONE1_FREQ = &10
+SN_BIT_TONE1_VOL = &20
+SN_BIT_NOISE_CTRL = &40
+SN_BIT_NOISE_VOL = &80
+
+\\ SN Frequency Constants
+SN_FREQ_BYTE_MASK = &80
+SN_FREQ_FIRST_BYTE_MASK = &0F
+SN_FREQ_SECOND_BYTE_MASK = &3F
+
+\\ SN Volume Constants
+SN_VOL_MASK = &0F
+SN_VOL_MAX = &0F
+
+\\ Noise Freqency Vaues
+SN_NF_MASK = &03
+SN_NF_LOW = 0
+SN_NF_MED = 1
+SN_NF_HIGH = 2
+SN_NF_TONE1 = 3
+
+\\ Noise Frequency Type
+SN_FB_MASK = &04
+SN_FB_PERIODIC = 0
+SN_FB_WHITENOISE = &04
+
 
 \ ******************************************************************
 \ *	Define debug flags
@@ -79,7 +122,6 @@ FONT_first_glyph = ' '
 FONT_last_glyph = '~'
 FONT_num_glyphs = FONT_last_glyph - FONT_first_glyph + 1
 
-
 \ ******************************************************************
 \ *	Define app constants
 \ ******************************************************************
@@ -89,6 +131,19 @@ NUM_vgm_files = 4				; size of our file table
 FX_num_freqs = 64
 FX_draw_at_row = 12				; bottom of vu meter (row)
 FX_draw_end_x = 68				; right of vu meter (pixel)
+
+\\ Tracker screen setup
+TRACKER_lineno_field_xpos = 4
+TRACKER_ch3_field_xpos = 12
+TRACKER_ch2_field_xpos = 19
+TRACKER_ch1_field_xpos = 26
+TRACKER_noise_field_xpos = 33
+
+TRACKER_top_line_ypos = 14
+TRACKER_active_line_ypos = 17
+TRACKER_dupe_line_ypos = 18
+TRACKER_bottom_line_ypos = 21
+
 
 \ ******************************************************************
 \ *	Define fast (zero page) runtime variables
@@ -117,8 +172,11 @@ GUARD &9F
 \\ Player vars
 .player_ended			SKIP 1		; non-zero when player has reached end of tune
 .player_data			SKIP 1		; temporary variable when decoding sound data - must be separate as player running on events
-.player_channel_vals	SKIP 8		; data values passed to each channel during audio playback (4x channels x pitch + volume)
-.player_last_channel	SKIP 1		; last channel (register) refered to by the VGM sound data
+.player_channel_vals	SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
+.player_last_reg		SKIP 1		; last channel (register) refered to by the VGM sound data
+
+.player_counter			SKIP 1		; increments by 1 every poll (20ms) - used as our tracker line no. & to sync fx with audio update
+.player_reg_bits		SKIP 1		; bits 0 - 7 set if SN register 0 - 7 updated this frame, cleared at start of player poll
 
 \\ Temporary vars
 .tmp_erase				SKIP 1		; used when erasing rows or pixels
@@ -235,10 +293,21 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 		TXA
 		BMI exit_demo
 
-		\\ Wait for vsync
-		LDA #19
-		JSR osbyte
+		\\ Wait for vsync - NO LONGER WAITING FOR VSYNC
+		;LDA #19
+		;JSR osbyte
 
+		\\ Actually sync to audio instead
+		LDA player_counter
+		.wait_for_audio_sync
+		CMP player_counter
+		BEQ wait_for_audio_sync
+
+		\\ At this point we know audio data has just been sent to SN
+		\\ So all of our vars from the player are fresh
+		\\ Use these to render our demo FX (before next vsync!)
+		\\ May still want to do something clever to avoid flicker
+		
 		\\ Poll our demo
 		JSR poll_demo
 
@@ -328,6 +397,9 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 
 .poll_demo
 {
+	\\ Poll tracker
+	JSR poll_tracker
+
 	\\ Poll our VU effects
 	JSR poll_fx
 
@@ -609,13 +681,13 @@ ENDMACRO
 
 .init_scr			; Y = y pos drawn at, A, X = address of message
 {
-	\\ Set address of message
+	\\ Set address of message - **MODIFIES CODE**
 	STA poll_scr_msg_addr_1+1
 	STA poll_scr_msg_addr_2+1
 	STX poll_scr_msg_addr_1+2
 	STX poll_scr_msg_addr_2+2
 
-	\\ Set address that scrolltext drawn to
+	\\ Set address that scrolltext drawn to - **MODIFIES CODE**
 	STY scr_y
 	LDA mode7_row_addr_LO,Y
 	STA poll_scr_line_1_addr+1
@@ -650,7 +722,7 @@ ENDMACRO
 
 	LDY tmp_msg_idx
 	.poll_scr_msg_addr_1
-	LDA demo_message,Y			; actually contains the offset into font data
+	LDA demo_message,Y			; actually contains the offset into font data - **SELF-MODIFIED CODE**
 	BNE poll_scr_not_end_of_msg			; finish if zero
 
 	LDY #0
@@ -667,11 +739,11 @@ ENDMACRO
 	.poll_scr_draw_col
 	LDA mode7_font_data,Y
 	.poll_scr_line_1_addr
-	STA &7C00,X
+	STA &7C00,X						; **SELF-MODIFIED CODE**
 
 	LDA mode7_font_data + 40,Y
 	.poll_scr_line_2_addr
-	STA &7C28,X
+	STA &7C28,X						; **SELF-MODIFIED CODE**
 
 	\\ Next screen column
 	INX
@@ -706,7 +778,7 @@ ENDMACRO
 
 	LDY scr_msg_idx
 	.poll_scr_msg_addr_2
-	LDA demo_message,Y
+	LDA demo_message,Y			; **SELF-MODIFIED CODE**
 	BNE poll_scr_return
 	STA scr_msg_idx
 
@@ -800,6 +872,391 @@ ENDMACRO
 
 
 \ ******************************************************************
+\ *	Tracker scrolling display
+\ ******************************************************************
+
+.write_decimal_at		; A = number, X,Y = location on MODE 7 screen
+{
+	PHA
+	LDA mode7_row_addr_LO,Y
+	STA writeptr
+	LDA mode7_row_addr_HI,Y
+	STA writeptr+1
+
+	TXA:TAY
+
+	\\ Count hundreds
+	PLA
+	LDX #0
+	.loop_100
+	CMP #100
+	BCC done_100
+	SEC
+	SBC #100
+	INX
+	JMP loop_100
+	.done_100
+	PHA
+
+	\\ Write hundreds
+	CLC
+	TXA
+	ADC #'0'
+	STA (writeptr),Y
+	INY
+	
+	\\ Count tens
+	PLA
+	LDX #0
+	.loop_10
+	CMP #10
+	BCC done_10
+	SEC
+	SBC #10
+	INX
+	JMP loop_10
+	.done_10
+	PHA
+
+	\\ Write tens
+	CLC
+	TXA
+	ADC #'0'
+	STA (writeptr),Y
+	INY
+
+	\\ Write units
+	CLC
+	PLA
+	ADC #'0'
+	STA (writeptr),Y
+
+	.return
+	RTS
+}
+
+.mode7_copy_line				; copy line X to line Y
+{
+	\\ From line X
+	LDA mode7_row_addr_LO,X
+	STA readptr
+	LDA mode7_row_addr_HI,X
+	STA readptr+1
+
+	\\ To line Y
+	LDA mode7_row_addr_LO,Y
+	STA writeptr
+	LDA mode7_row_addr_HI,Y
+	STA writeptr+1
+
+	LDY #0
+	.loop
+	LDA (readptr),Y
+	STA (writeptr),Y
+	INY
+	CPY #MODE7_char_width
+	BNE loop
+
+	.return
+	RTS
+}
+
+.copy_channel_fields			; copy channel fields only from line X to line Y
+{
+	\\ From line X
+	LDA mode7_row_addr_LO,X
+	STA readptr
+	LDA mode7_row_addr_HI,X
+	STA readptr+1
+
+	\\ To line Y
+	LDA mode7_row_addr_LO,Y
+	STA writeptr
+	LDA mode7_row_addr_HI,Y
+	STA writeptr+1
+
+	\\ Tracker line number field
+	LDY #TRACKER_lineno_field_xpos
+
+	\\ Copy 4 bytes
+	LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+
+	\\ Channel 3 field
+	LDY #TRACKER_ch3_field_xpos
+	
+	\\ Copy 4 bytes
+	LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+
+	\\ Channel 2 field
+	LDY #TRACKER_ch2_field_xpos
+
+	\\ Copy 4 bytes
+	LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+
+	\\ Channel 1 field
+	LDY #TRACKER_ch1_field_xpos
+	
+	\\ Copy 4 bytes
+	LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+
+	\\ Noise channel field
+	LDY #TRACKER_noise_field_xpos
+	
+	\\ Copy 4 bytes
+	LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+	INY: LDA (readptr),Y: STA (writeptr),Y
+
+	.return
+	RTS
+}
+
+.write_note_name
+{
+	LDA note_name_table_0,X
+	STA (writeptr),Y
+	INY
+
+	LDA note_name_table_1,X
+	STA (writeptr),Y
+	INY
+
+	LDA note_name_table_2,X
+	STA (writeptr),Y
+	INY
+
+	.return
+	RTS
+}
+
+.write_note_blank
+{
+	LDA #'-'
+	STA (writeptr),Y
+	INY
+	STA (writeptr),Y
+	INY
+	STA (writeptr),Y
+	INY
+
+	.return
+	RTS
+}
+
+MACRO WRITE_VOL_CHAR
+{
+	LDA debug_hexchars, X
+	STA (writeptr),Y
+}
+ENDMACRO
+
+MACRO WRITE_VOL_BLANK
+{
+	LDA #'-'
+	STA (writeptr),Y
+}
+ENDMACRO
+
+.poll_tracker
+{
+	\\ Temporary scroll values up - don't need to calc write addresses when locations fixed
+	LDX #TRACKER_top_line_ypos + 1
+	LDY #TRACKER_top_line_ypos
+	JSR copy_channel_fields
+
+	LDX #TRACKER_top_line_ypos + 2
+	LDY #TRACKER_top_line_ypos + 1
+	JSR copy_channel_fields
+
+	LDX #TRACKER_active_line_ypos
+	LDY #TRACKER_top_line_ypos + 2
+	JSR copy_channel_fields
+
+	\\ **Should be writing our fields to active line!**
+
+	LDX #TRACKER_bottom_line_ypos - 2
+	LDY #TRACKER_active_line_ypos
+	JSR copy_channel_fields
+
+	LDX #TRACKER_bottom_line_ypos - 1
+	LDY #TRACKER_bottom_line_ypos - 2
+	JSR copy_channel_fields
+
+	LDX #TRACKER_bottom_line_ypos
+	LDY #TRACKER_bottom_line_ypos - 1
+	JSR copy_channel_fields
+
+	\\ **Instead writing our live data into bottom line!**
+	\\ Write our current line number as decimal
+
+	LDA player_counter
+	LDX #TRACKER_lineno_field_xpos + 1			; +1 because leading 0 is constant
+	LDY #TRACKER_bottom_line_ypos
+	JSR write_decimal_at
+
+	\\ Can reuse writeptr here - pointing to start of line we're writing!
+	\\ Write channel values into fields - DO THIS BETTER?
+
+	.write_field_channel3
+	{
+		LDY #12
+		LDA player_reg_bits
+		AND #SN_BIT_TONE3_FREQ		; channel 3 tone
+		BEQ no_ch3_tone
+
+		LDX player_channel_vals + SN_REG_TONE3_FREQ
+		JSR write_note_name
+		BNE try_ch3_vol		; OK because last instruction is INY
+
+		.no_ch3_tone
+		JSR write_note_blank
+
+		.try_ch3_vol
+		LDA player_reg_bits
+		AND #SN_BIT_TONE3_VOL		; channel 3 vol
+		BEQ no_ch3_vol
+
+		LDX player_channel_vals + SN_REG_TONE3_VOL
+		WRITE_VOL_CHAR
+		BNE done_ch3		; OK because A is char therefore not zero
+
+		.no_ch3_vol
+		WRITE_VOL_BLANK
+
+		.done_ch3
+	}
+
+	.write_field_channel2
+	{
+		LDY #19
+		LDA player_reg_bits
+		AND #SN_BIT_TONE2_FREQ		; channel 2 tone
+		BEQ no_ch2_tone
+
+		LDX player_channel_vals + SN_REG_TONE2_FREQ
+		JSR write_note_name
+		BNE try_ch2_vol		; OK because last instruction is INY
+
+		.no_ch2_tone
+		JSR write_note_blank
+
+		.try_ch2_vol
+		LDA player_reg_bits
+		AND #SN_BIT_TONE2_VOL		; channel 2 vol
+		BEQ no_ch2_vol
+
+		LDX player_channel_vals + SN_REG_TONE2_VOL
+		WRITE_VOL_CHAR
+		BNE done_ch2		; OK because A is char therefore not zero
+
+		.no_ch2_vol
+		WRITE_VOL_BLANK
+
+		.done_ch2
+	}
+
+	.write_field_channel1
+	{
+		LDY #26
+		LDA player_reg_bits
+		AND #SN_BIT_TONE1_FREQ		; channel 1 tone
+		BEQ no_ch1_tone
+
+		LDX player_channel_vals + SN_REG_TONE1_FREQ
+		JSR write_note_name
+		BNE try_ch1_vol		; OK because last instruction is INY
+
+		.no_ch1_tone
+		JSR write_note_blank
+
+		.try_ch1_vol
+		LDA player_reg_bits
+		AND #SN_BIT_TONE1_VOL		; channel 1 vol
+		BEQ no_ch1_vol
+
+		LDX player_channel_vals + SN_REG_TONE1_VOL
+		WRITE_VOL_CHAR
+		BNE done_ch1		; OK because A is char therefore not zero
+
+		.no_ch1_vol
+		WRITE_VOL_BLANK
+
+		.done_ch1
+	}
+
+	.write_field_noise
+	{
+		LDY #33
+		LDA player_reg_bits
+		AND #SN_BIT_NOISE_CTRL		; noise channel control
+		BEQ no_noise_tone
+
+		\\ Check noise control
+		LDA player_channel_vals + SN_REG_NOISE_CTRL
+		AND #SN_FB_MASK
+		BEQ noise_periodic
+		LDA #'W'					; White Noise
+		EQUB &2C					; = BIT noise_periodic => skip next two bytes
+		.noise_periodic
+		LDA #'P'					; Periodic Noise
+		STA (writeptr),Y
+		INY
+
+		LDA player_channel_vals + SN_REG_NOISE_CTRL
+		AND #SN_NF_MASK
+		ASL A						; *2
+		TAX
+		LDA noise_note_0,X			; noise_note = Lo,Me,Hi,T1	
+		STA (writeptr),Y
+		INY
+		LDA noise_note_0+1,X		; 2nd char
+		STA (writeptr),Y
+		INY
+
+		BNE try_noise_vol			; OK because last instruction is INY
+
+		.no_noise_tone
+		JSR write_note_blank
+
+		.try_noise_vol
+		LDA player_reg_bits
+		AND #SN_BIT_NOISE_VOL		; noise channel vol
+		BEQ no_noise_vol
+
+		LDX player_channel_vals + SN_REG_NOISE_VOL
+		WRITE_VOL_CHAR
+		BNE done_noise				; OK because A is char therefore not zero
+
+		.no_noise_vol
+		WRITE_VOL_BLANK	
+
+		.done_noise
+	}
+
+	\\ Duplicate line 17 to line 18 for double height
+	LDX #TRACKER_active_line_ypos
+	LDY #TRACKER_dupe_line_ypos
+	JSR mode7_copy_line
+
+	.return
+	RTS
+}
+
+
+\ ******************************************************************
 \ *	VGM music player
 \ ******************************************************************
 
@@ -810,7 +1267,11 @@ ENDMACRO
 
 	LDA #0
 	STA player_ended
-	STA player_last_channel
+	STA player_last_reg
+	STA player_reg_bits
+
+	LDA #&FF
+	STA player_counter
 
 	.return
 	RTS
@@ -838,6 +1299,8 @@ ENDMACRO
 .poll_player
 {
 	\\ Assume this is called every 20ms..
+	LDA #0
+	STA player_reg_bits
 
 	\\ Get next byte from the stream
 	jsr get_decrunched_byte
@@ -863,10 +1326,12 @@ ENDMACRO
 	JMP sound_data_loop
 	
 	.wait_20_ms
+	INC player_counter				; indicate we have completed another frame of audio
 	CLC
 	RTS
 
 	._player_end
+	INC player_counter				; indicate we have completed another frame of audio?
 	STA player_ended
 
 	._sample_end
@@ -901,46 +1366,72 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 .psg_decode
 {
 	STA player_data
-	AND #&80
+	AND #SN_FREQ_BYTE_MASK
 	BEQ second_byte
 
 	\\ First byte
 
 	\\ Obtain register field
 	LDA player_data
-	AND #&70
+	AND #SN_REG_MASK
 	LSR A:LSR A:LSR A:LSR A
-	STA player_last_channel
+	STA player_last_reg
 
+	\\ Y is our register number
 	TAY
 
-	LDA player_data
-	AND #&01
-	BEQ freq
+	\\ Set bit field for each register used this frame
+	LDA num_to_bit,Y				; look up bit for reg number
+	ORA player_reg_bits				; mask in bit
+	STA player_reg_bits
 
-	\\ Volume
+	\\ Is this tone or volume register?
+	TYA
+	AND #&01
+	BEQ process_tone_data
+
+	\\ Volume data
 	LDA player_data
-	AND #&0F
+	AND #SN_VOL_MASK
 	STA player_channel_vals,Y
 
+	\\ Invert volume (0 = max 15 = off)
 	SEC
-	LDA #15
+	LDA #SN_VOL_MAX
 	SBC player_channel_vals,Y
 	STA player_channel_vals,Y
 	JMP return
 
-	\\ Frequency
-	.freq
+	\\ Frequency / tone data
+	.process_tone_data
+	CPY #SN_REG_NOISE_CTRL				; Y already register number
+	BNE tone_channel
+
+	\\ Noise channel
+	LDA player_data
+	AND #(SN_NF_MASK OR SN_FB_MASK)		; store noise freq data
+	STA player_channel_vals,Y
+
+	JMP return
+
+	.tone_channel
+	LDA player_data
+	AND #SN_FREQ_FIRST_BYTE_MASK		; F3 - F0
+	LSR A: LSR A						; lose bottom 2 bits
+	ORA player_channel_vals,Y			; combine with top 6 bits
+	STA player_channel_vals,Y
+
 	JMP return
 
 	.second_byte
 	LDA player_data
-	AND #&3F
-	LDY player_last_channel
+	AND #SN_FREQ_SECOND_BYTE_MASK		; F9 - F4
+	ASL A: ASL A						; put 6 bits to top of byte
+	LDY player_last_reg
 	STA player_channel_vals,Y
 
-	;CPY #4
-	;BNE return
+	\\ If we have some frequency data spike our freq array
+	LSR A: LSR A
 	TAX
 	LDA #15
 	STA freq_array,X
@@ -1008,10 +1499,10 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 \ *	Debug helpers
 \ ******************************************************************
 
-IF _DEBUG
 .debug_hexchars
-EQUS "0123456789abcdef"
+EQUS "0123456789abcdef"		; actually no longer debug
 
+IF _DEBUG
 .debug_print_A				; trashes X
 {
 	PHA:PHA
@@ -1342,6 +1833,79 @@ EQUS "fluid", 13
 .vgm_filename_4
 EQUS "ice", 13
 
+
+\ ******************************************************************
+\ *	Look up tables
+\ ******************************************************************
+
+\\ Start address of each row in MODE 7 - wasteful but helpful
+.mode7_row_addr_LO
+FOR n, 0, MODE7_char_height-1, 1
+EQUB LO(MODE7_base_addr + n * MODE7_char_width)
+NEXT
+
+.mode7_row_addr_HI
+FOR n, 0, MODE7_char_height-1, 1
+EQUB HI(MODE7_base_addr + n * MODE7_char_width)
+NEXT
+
+\\ Lookup byte address for a given teletexel y coordinate - wasteful but fast
+.mode7_texel_y_to_row_addr_LO
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB LO(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
+NEXT
+
+.mode7_texel_y_to_row_addr_HI
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB HI(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
+NEXT
+
+\\ Lookup bit mask for a given teletexel y coordinate - wasteful but fast
+.mode7_texel_lookup_x_even
+FOR n, 0, MODE7_texel_height-1, 1
+	EQUB 1 << ((n % 3) * 2)
+NEXT
+
+.mode7_texel_lookup_x_odd
+FOR n, 0, MODE7_texel_height-1, 1
+	IF (n % 3) = 0
+		EQUB 2
+	ELIF (n % 3) = 1
+		EQUB 8
+	ELSE
+		EQUB 64			; stupid teletext spec
+	ENDIF
+NEXT
+
+.num_to_bit				; look up bit N
+EQUB &01, &02, &04, &08, &10, &20, &40, &80
+
+.noise_note_0 EQUS "Lo"
+.noise_note_1 EQUS "Md"
+.noise_note_2 EQUS "Hi"
+.noise_note_3 EQUS "T1"
+
+\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
+\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
+ALIGN &100
+.note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
+;note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
+\\ Quirk of MODE 7: ASCII 35='#' but in gfx mode 35+128='£' so need to use ASCII 95='_' so in gfx mode 95+128='#'
+.note_name_table_1 EQUS "----_-_-_--_-_---_-_---_--_---__--__----___--___------___---____--------____----_____----------______------______--------------________--------________---------_________---------------------___________------------_____________----------------------------__"
+.note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
+
+\ ******************************************************************
+\ *	MODE 7 screen data
+\ ******************************************************************
+
+.mode7_screen_data
+INCBIN "screen3.mode7"
+
+.mode7_font_data
+INCBIN "font_5x5.mode7"
+
+
+\\ Need to put this last as I don't know how to undo the character map!
 \\ Map character ASCII values to the byte offset into our MODE 7 font
 \\ This is "cunning" but only works because the font has fewer than 256/6 (42) glyphs..
 
@@ -1425,68 +1989,7 @@ EQUS "BeebTracker scrolltext in the right place but now too fast! Needs to be on
 .load_message
 EQUS "Loading... ", 0
 
-
-\ ******************************************************************
-\ *	Look up tables
-\ ******************************************************************
-
-\\ Start address of each row in MODE 7 - wasteful but helpful
-.mode7_row_addr_LO
-FOR n, 0, MODE7_char_height-1, 1
-EQUB LO(MODE7_base_addr + n * MODE7_char_width)
-NEXT
-
-.mode7_row_addr_HI
-FOR n, 0, MODE7_char_height-1, 1
-EQUB HI(MODE7_base_addr + n * MODE7_char_width)
-NEXT
-
-\\ Lookup byte address for a given teletexel y coordinate - wasteful but fast
-.mode7_texel_y_to_row_addr_LO
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB LO(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
-NEXT
-
-.mode7_texel_y_to_row_addr_HI
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB HI(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
-NEXT
-
-\\ Lookup bit mask for a given teletexel y coordinate - wasteful but fast
-.mode7_texel_lookup_x_even
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB 1 << ((n % 3) * 2)
-NEXT
-
-.mode7_texel_lookup_x_odd
-FOR n, 0, MODE7_texel_height-1, 1
-	IF (n % 3) = 0
-		EQUB 2
-	ELIF (n % 3) = 1
-		EQUB 8
-	ELSE
-		EQUB 64			; stupid teletext spec
-	ENDIF
-NEXT
-
-\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
-\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
-ALIGN &100
-.note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
-.note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
-.note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
-
-
-
-\ ******************************************************************
-\ *	MODE 7 screen data
-\ ******************************************************************
-
-.mode7_screen_data
-INCBIN "screen3.mode7"
-
-.mode7_font_data
-INCBIN "font_5x5.mode7"
+\\ ** ANY EQUS LINES AFTER THIS POINT WILL STILL CONTAIN REMAPPED CHARACTERS ** \\
 
 \ ******************************************************************
 \ *	End address to be saved
@@ -1499,15 +2002,17 @@ INCBIN "font_5x5.mode7"
 \ *	Space reserved for runtime buffers not preinitialised
 \ ******************************************************************
 
+\\ Frequency array for vu-meter effect
+.freq_array				SKIP FX_num_freqs
+
+\\ Params block for osfile command
+.osfile_params			SKIP 18
+
 \\ Exomiser unpack buffer (must be page aligned)
 ALIGN &100
 .EXO_buffer_start		SKIP EXO_buffer_len
 .EXO_buffer_end
 
-\\ Frequency array for vu-meter effect
-.freq_array				SKIP FX_num_freqs
-
-.osfile_params			SKIP 18
 
 \ ******************************************************************
 \ *	EXO VGM data file
@@ -1515,9 +2020,9 @@ ALIGN &100
 \ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
 \ ******************************************************************
 
-\\ TODO - load this at run-time!
 ALIGN &100
 .VGM_stream_data
+\\ Now loaded at run-time so don't know end of data!
 .VGM_end_of_data
 
 
