@@ -26,7 +26,7 @@ VU FX
 - Hook up to improved frequency & beat extraction
 
 Tracker FX
-- Write tracker display routine!
+- Write tracker display routine! (KC) - DONE (V1)
 - Timer display routine (SM)
 
 Loader FX
@@ -41,7 +41,7 @@ Outro FX
 - Static MODE 7 screen at minimum
 
 Main Loop
-- State machine for demo logic
+- State machine for demo logic - DONE (in code not separate state machine routine)
 	- Intro
 	- Menu
 	- Loading

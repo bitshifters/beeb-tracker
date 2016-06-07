@@ -1492,10 +1492,12 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	.second_byte
 	LDA player_data
 	AND #SN_FREQ_SECOND_BYTE_MASK		; F9 - F4
+	STA tmp_var
 	ASL A: ASL A						; put 6 bits to top of byte
 	LDY player_last_reg
 	STA player_channel_vals,Y
 
+	LDA tmp_var
 IF FX_num_freqs == 16
 	\\ 16 frequency bars, so use top 4 bits
 	LSR A : LSR A
@@ -1955,6 +1957,26 @@ FOR n, 0, MODE7_texel_height-1, 1
 	ENDIF
 NEXT
 
+\\ 16 Arrangements of 5 teletext character bytes to render a vertical equalizer bar
+.fx_table
+EQUB 160, 160, 160, 160, 160
+EQUB 160+80, 160, 160, 160, 160
+EQUB 160+92, 160, 160, 160, 160
+EQUB 160+95, 160, 160, 160, 160
+EQUB 160+95, 160+80, 160, 160, 160
+EQUB 160+95, 160+92, 160, 160, 160
+EQUB 160+95, 160+95, 160, 160, 160
+EQUB 160+95, 160+95, 160+80, 160, 160
+EQUB 160+95, 160+95, 160+92, 160, 160
+EQUB 160+95, 160+95, 160+95, 160, 160
+EQUB 160+95, 160+95, 160+95, 160+80, 160
+EQUB 160+95, 160+95, 160+95, 160+92, 160
+EQUB 160+95, 160+95, 160+95, 160+95, 160
+EQUB 160+95, 160+95, 160+95, 160+95, 160+80
+EQUB 160+95, 160+95, 160+95, 160+95, 160+92
+EQUB 160+95, 160+95, 160+95, 160+95, 160+95
+EQUB 160+95, 160+95, 160+95, 160+95, 160+95	; last row copied to enable fixed bar effect
+
 .num_to_bit				; look up bit N
 EQUB &01, &02, &04, &08, &10, &20, &40, &80
 
@@ -1971,16 +1993,6 @@ ALIGN &100
 \\ Quirk of MODE 7: ASCII 35='#' but in gfx mode 35+128='£' so need to use ASCII 95='_' so in gfx mode 95+128='#'
 .note_name_table_1 EQUS "----_-_-_--_-_---_-_---_--_---__--__----___--___------___---____--------____----_____----------______------______--------------________--------________---------_________---------------------___________------------_____________----------------------------__"
 .note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
-
-\ ******************************************************************
-\ *	MODE 7 screen data
-\ ******************************************************************
-
-.mode7_screen_data
-INCBIN "screen3.mode7"
-
-.mode7_font_data
-INCBIN "font_5x5.mode7"
 
 
 \\ Need to put this last as I don't know how to undo the character map!
@@ -2068,76 +2080,6 @@ EQUS "BeebTracker scrolltext in the right place but now too fast! Needs to be on
 EQUS "Loading... ", 0
 
 \\ ** ANY EQUS LINES AFTER THIS POINT WILL STILL CONTAIN REMAPPED CHARACTERS ** \\
-
-\ ******************************************************************
-\ *	Look up tables
-\ ******************************************************************
-
-\\ Start address of each row in MODE 7 - wasteful but helpful
-.mode7_row_addr_LO
-FOR n, 0, MODE7_char_height-1, 1
-EQUB LO(MODE7_base_addr + n * MODE7_char_width)
-NEXT
-
-.mode7_row_addr_HI
-FOR n, 0, MODE7_char_height-1, 1
-EQUB HI(MODE7_base_addr + n * MODE7_char_width)
-NEXT
-
-\\ Lookup byte address for a given teletexel y coordinate - wasteful but fast
-.mode7_texel_y_to_row_addr_LO
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB LO(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
-NEXT
-
-.mode7_texel_y_to_row_addr_HI
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB HI(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
-NEXT
-
-\\ Lookup bit mask for a given teletexel y coordinate - wasteful but fast
-.mode7_texel_lookup_x_even
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB 1 << ((n % 3) * 2)
-NEXT
-
-.mode7_texel_lookup_x_odd
-FOR n, 0, MODE7_texel_height-1, 1
-	IF (n % 3) = 0
-		EQUB 2
-	ELIF (n % 3) = 1
-		EQUB 8
-	ELSE
-		EQUB 64			; stupid teletext spec
-	ENDIF
-NEXT
-
-\\ 16 Arrangements of 5 teletext character bytes to render a vertical equalizer bar
-.fx_table
-EQUB 160, 160, 160, 160, 160
-EQUB 160+80, 160, 160, 160, 160
-EQUB 160+92, 160, 160, 160, 160
-EQUB 160+95, 160, 160, 160, 160
-EQUB 160+95, 160+80, 160, 160, 160
-EQUB 160+95, 160+92, 160, 160, 160
-EQUB 160+95, 160+95, 160, 160, 160
-EQUB 160+95, 160+95, 160+80, 160, 160
-EQUB 160+95, 160+95, 160+92, 160, 160
-EQUB 160+95, 160+95, 160+95, 160, 160
-EQUB 160+95, 160+95, 160+95, 160+80, 160
-EQUB 160+95, 160+95, 160+95, 160+92, 160
-EQUB 160+95, 160+95, 160+95, 160+95, 160
-EQUB 160+95, 160+95, 160+95, 160+95, 160+80
-EQUB 160+95, 160+95, 160+95, 160+95, 160+92
-EQUB 160+95, 160+95, 160+95, 160+95, 160+95
-EQUB 160+95, 160+95, 160+95, 160+95, 160+95	; last row copied to enable fixed bar effect
-
-\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
-\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
-ALIGN &100
-.note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
-.note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
-.note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
 
 
 \ ******************************************************************
