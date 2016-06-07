@@ -191,7 +191,6 @@ GUARD &9F
 \\ Player vars
 .player_ended			SKIP 1		; non-zero when player has reached end of tune
 .player_data			SKIP 1		; temporary variable when decoding sound data - must be separate as player running on events
-.player_channel_vals	SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
 .player_last_reg		SKIP 1		; last channel (register) refered to by the VGM sound data
 
 .player_counter			SKIP 1		; increments by 1 every poll (20ms) - used as our tracker line no. & to sync fx with audio update
@@ -951,7 +950,6 @@ ELSE
 	CMP #FX_num_freqs
 ENDIF
 
-
 	BNE fx_column_loop
 
 	\\ Render the channel beat bars
@@ -967,10 +965,6 @@ ENDIF
 	LDA #3
 	LDX #FX_ch3_x
 	JSR draw_beat_bar
-
-
-	
-	
 	
 	\\ Let VU meter values fall to zero
 	LDY #(FX_num_freqs) - 1
@@ -1252,7 +1246,7 @@ ENDMACRO
 		AND #SN_BIT_TONE3_FREQ		; channel 3 tone
 		BEQ no_ch3_tone
 
-		LDX player_channel_vals + SN_REG_TONE3_FREQ
+		LDX player_reg_vals + SN_REG_TONE3_FREQ
 		JSR write_note_name
 		BNE try_ch3_vol		; OK because last instruction is INY
 
@@ -1264,7 +1258,7 @@ ENDMACRO
 		AND #SN_BIT_TONE3_VOL		; channel 3 vol
 		BEQ no_ch3_vol
 
-		LDX player_channel_vals + SN_REG_TONE3_VOL
+		LDX player_reg_vals + SN_REG_TONE3_VOL
 		WRITE_VOL_CHAR
 		BNE done_ch3		; OK because A is char therefore not zero
 
@@ -1281,7 +1275,7 @@ ENDMACRO
 		AND #SN_BIT_TONE2_FREQ		; channel 2 tone
 		BEQ no_ch2_tone
 
-		LDX player_channel_vals + SN_REG_TONE2_FREQ
+		LDX player_reg_vals + SN_REG_TONE2_FREQ
 		JSR write_note_name
 		BNE try_ch2_vol		; OK because last instruction is INY
 
@@ -1293,7 +1287,7 @@ ENDMACRO
 		AND #SN_BIT_TONE2_VOL		; channel 2 vol
 		BEQ no_ch2_vol
 
-		LDX player_channel_vals + SN_REG_TONE2_VOL
+		LDX player_reg_vals + SN_REG_TONE2_VOL
 		WRITE_VOL_CHAR
 		BNE done_ch2		; OK because A is char therefore not zero
 
@@ -1310,7 +1304,7 @@ ENDMACRO
 		AND #SN_BIT_TONE1_FREQ		; channel 1 tone
 		BEQ no_ch1_tone
 
-		LDX player_channel_vals + SN_REG_TONE1_FREQ
+		LDX player_reg_vals + SN_REG_TONE1_FREQ
 		JSR write_note_name
 		BNE try_ch1_vol		; OK because last instruction is INY
 
@@ -1322,7 +1316,7 @@ ENDMACRO
 		AND #SN_BIT_TONE1_VOL		; channel 1 vol
 		BEQ no_ch1_vol
 
-		LDX player_channel_vals + SN_REG_TONE1_VOL
+		LDX player_reg_vals + SN_REG_TONE1_VOL
 		WRITE_VOL_CHAR
 		BNE done_ch1		; OK because A is char therefore not zero
 
@@ -1340,7 +1334,7 @@ ENDMACRO
 		BEQ no_noise_tone
 
 		\\ Check noise control
-		LDA player_channel_vals + SN_REG_NOISE_CTRL
+		LDA player_reg_vals + SN_REG_NOISE_CTRL
 		AND #SN_FB_MASK
 		BEQ noise_periodic
 		LDA #'W'					; White Noise
@@ -1350,7 +1344,7 @@ ENDMACRO
 		STA (writeptr),Y
 		INY
 
-		LDA player_channel_vals + SN_REG_NOISE_CTRL
+		LDA player_reg_vals + SN_REG_NOISE_CTRL
 		AND #SN_NF_MASK
 		ASL A						; *2
 		TAX
@@ -1371,7 +1365,7 @@ ENDMACRO
 		AND #SN_BIT_NOISE_VOL		; noise channel vol
 		BEQ no_noise_vol
 
-		LDX player_channel_vals + SN_REG_NOISE_VOL
+		LDX player_reg_vals + SN_REG_NOISE_VOL
 		WRITE_VOL_CHAR
 		BNE done_noise				; OK because A is char therefore not zero
 
@@ -1508,7 +1502,7 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 
 	\\ Obtain register fields
 	
-	\\ Get channel from bits 7,6
+	\\ Get register from bits 7,6,5
 	LDA player_data
 	AND #SN_REG_MASK
 	LSR A:LSR A:LSR A:LSR A
@@ -1530,13 +1524,13 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	\\ Volume data
 	LDA player_data
 	AND #SN_VOL_MASK
-	STA player_channel_vals,Y
+	STA player_reg_vals,Y
 
 	\\ Invert volume (0 = max 15 = off)
 	SEC
 	LDA #SN_VOL_MAX
-	SBC player_channel_vals,Y
-	STA player_channel_vals,Y
+	SBC player_reg_vals,Y
+	STA player_reg_vals,Y
 	JMP return
 
 	\\ Frequency / tone data
@@ -1547,7 +1541,7 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	\\ Noise channel
 	LDA player_data
 	AND #(SN_NF_MASK OR SN_FB_MASK)		; store noise freq data
-	STA player_channel_vals,Y
+	STA player_reg_vals,Y
 
 	JMP trigger_beat
 
@@ -1555,12 +1549,11 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	LDA player_data
 	AND #SN_FREQ_FIRST_BYTE_MASK		; F3 - F0
 	LSR A: LSR A						; lose bottom 2 bits
-	ORA player_channel_vals,Y			; combine with top 6 bits
-	STA player_channel_vals,Y
+	STA player_reg_vals,Y
 
 	.trigger_beat
 	\\ trigger the beat effect for this channel
-	TYA:ASL A:TAY
+	TYA:LSR A:TAY						; channel is register / 2
 	LDA #9
 	STA chan_array, Y
 
@@ -1572,11 +1565,12 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	STA tmp_var
 	ASL A: ASL A						; put 6 bits to top of byte
 	LDY player_last_reg
-	STA player_channel_vals,Y
+	ORA player_reg_vals,Y				; combine with bottom 2 bits
+	STA player_reg_vals,Y
 
 	\\ trigger the beat effect for this channel
-	TYA:ASL A:TAY
 ; technically correct, but better visuals without this.
+;	TYA:LSR A:TAY						; channel is register / 2
 ;	LDA #9
 ;	STA chan_array, Y
 
@@ -2190,6 +2184,7 @@ INCBIN "font_5x5.mode7"
 \\ These two must be contiguous in memory
 .freq_array				SKIP FX_num_freqs
 .chan_array				SKIP FX_num_channels
+.player_reg_vals		SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
 
 \\ Params block for osfile command
 .osfile_params			SKIP 18
