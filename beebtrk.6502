@@ -17,9 +17,15 @@ osbyte = &FFF4
 osword = &FFF1
 EVENTV = &0220
 
-INKEY_esc = 112
-INKEY_q = 16
+\\ Internal Key Number not INKEY!
+IKN_esc = 112
+IKN_up = 57
+IKN_down = 41
+IKN_return = 73
+IKN_q = 16
+IKN_a = 65
 
+\\ Opcodes
 SEI_OP = $78
 CLI_OP = $58
 NOP_OP = $ea
@@ -75,14 +81,8 @@ SN_FB_WHITENOISE = &04
 _DEBUG = TRUE
 
 \ ******************************************************************
-\ *	Define macros
+\ *	Define global macros
 \ ******************************************************************
-
-MACRO SN_WRITE_ENABLE
-	LDX #&00: STX &FE40			; R0=Output Register "B" (write) (write 1 into bit 0 - write to sound chip)
-	NOP:NOP:NOP:NOP:NOP:NOP		; wait 8us (following LDX instruction takes 2 cycles)
-	LDX #&08: STX &FE40			; set sound chip write pin high
-ENDMACRO
 
 
 \ ******************************************************************
@@ -91,19 +91,6 @@ ENDMACRO
 
 \\ EXOMISER (compression library)
 EXO_buffer_len = 1024
-
-\\ VGM
-VGM_write_sound_data = &50
-VGM_wait_50_Hz = &63
-VGM_wait_60_Hz = &62
-VGM_wait_N_samples = &61
-VGM_end_of_stream = &66
-
-VGM_sample_rate = 44100
-VGM_50HZ_samples = (VGM_sample_rate / 50)
-VGM_60HZ_samples = (VGM_sample_rate / 60)
-VGM_100Hz_samples = (VGM_sample_rate / 100)
-VGM_POLL_samples = VGM_50HZ_samples
 
 \\ MODE 7
 MODE7_base_addr = &7C00
@@ -117,27 +104,23 @@ MODE7_graphic_black = 144
 MODE7_contiguous = 153
 MODE7_separated = 154
 
-\\ FONT
-FONT_first_glyph = ' '
-FONT_last_glyph = '~'
-FONT_num_glyphs = FONT_last_glyph - FONT_first_glyph + 1
 
 \ ******************************************************************
 \ *	Define app constants
 \ ******************************************************************
 
+\\ Number of entries in our file table
 NUM_vgm_files = 4				; size of our file table
 
-FX_num_freqs = 16				; number of VU bars - can be 16 or 32
+\\ VU & beat bar FX
+FX_num_freqs = 32				; number of VU bars - can be 16 or 32
 FX_num_channels = 4				; number of beat bars (one per channel)
-FX_draw_at_row = 12				; bottom of vu meter (row)
-FX_draw_end_x = 68				; right of vu meter (pixel)
 
 FX_chr_x = 4
 FX_chr_y = 8
 FX_chr_w = 32
 FX_chr_h = 5
-FX_address = &7C00 + FX_chr_y*40 + FX_chr_x
+FX_address = MODE7_base_addr + FX_chr_y*40 + FX_chr_x
 FX_address_row0 = FX_address
 FX_address_row1 = FX_address_row0 + 40
 FX_address_row2 = FX_address_row1 + 40
@@ -145,7 +128,7 @@ FX_address_row3 = FX_address_row2 + 40
 FX_address_row4 = FX_address_row3 + 40
 
 \\ Channel beat bar locations - beat bars are 3 chrs high
-FX_address_beat = &7C00 + 40*14
+FX_address_beat = MODE7_base_addr + 40*14
 FX_ch0_x = 10
 FX_ch1_x = 17
 FX_ch2_x = 24
@@ -162,6 +145,21 @@ TRACKER_top_line_ypos = 14
 TRACKER_active_line_ypos = 17
 TRACKER_dupe_line_ypos = 18
 TRACKER_bottom_line_ypos = 21
+
+\\ Menu screen setup
+MENU_entry_xpos = 3
+MENU_entry_width = 34
+MENU_top_line_ypos = 16
+MENU_bottom_line_ypos = 21
+MENU_overlay_ypos = 14
+MENU_overlay_size = 8 * MODE7_char_width				; 8 lines of 40 chars
+MENU_overlay_dst_addr = MODE7_base_addr + MENU_overlay_ypos * MODE7_char_width
+
+\\ Menu key config
+MENU_key_toggle = IKN_esc
+MENU_key_up = IKN_up
+MENU_key_down = IKN_down
+MENU_key_select = IKN_return
 
 
 \ ******************************************************************
@@ -224,16 +222,19 @@ GUARD &9F
 
 \\ App state vars
 .file_no				SKIP 1		; index into our file table
+.menu_old_file			SKIP 1
+.menu_key_held			SKIP 1
 
 \\ System vars
 .old_eventv				SKIP 2
+
 
 \ ******************************************************************
 \ *	Start address to be saved
 \ ******************************************************************
 
 ORG &1900	      					; code origin - assume standard BBC Micro
-GUARD &7C00							; ensure code size doesn't hit start of screen memory
+GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 
 .start
 
@@ -266,51 +267,90 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 	LDA #0: JSR oswrch
 	LDA #0: JSR oswrch
 
+	\\ Debounce
+	LDA #&FF
+	STA menu_key_held
+
 	\\ Load first file in our list
 	LDA #0
 	STA file_no
+
+
+	\\ Intro screen goes here \\
+
 	
-\\ ***** Enter loading state ***** \\
+\\ ***** Loading state ***** \\
 
-	.enter_loading_state
-	\\ Clear screen
-	LDA #12: JSR oswrch
-	JSR teletexel_init
+	.loading_state
+	{
+		\\ Clear screen
+		LDA #12: JSR oswrch
+		JSR teletexel_init
 
-	\\ Init scrolltext with loading message
-	LDA #LO(load_message):LDX #HI(load_message)
-	LDY #11:JSR init_scr
+		\\ Init scrolltext with loading message
+		LDA #LO(load_message):LDX #HI(load_message)
+		LDY #11:JSR init_scr
 
-	\\ Start our event driven fx
-	ldx #LO(load_eventv)
-	ldy #HI(load_eventv)
-	JSR start_eventv
+		\\ Start our event driven fx
+		ldx #LO(load_eventv)
+		ldy #HI(load_eventv)
+		JSR start_eventv
 
-	\\ Blocking file load
-	JSR load_file_from_table
-	PHA							; store return value
+		\\ Blocking file load
+		JSR load_file_from_table
+		PHA							; store return value
 
-	\\ Kill our event driven fx
-	JSR stop_eventv
+		\\ Kill our event driven fx
+		JSR stop_eventv
 
-	\\ Returned error?
-	PLA
-	BNE return
+		\\ Returned error?
+		PLA
+		BEQ no_error
 
-\\ ***** Enter demo state ***** \\
+		\\ Handle error (exit)
+		JMP return
+		
+		.no_error
+	}
+
+\\ ***** Demo (Tracker) state ***** \\
 
 	\\ Initialise demo state
 	JSR init_demo
 
+	.enter_demo_state
+
+	\\ Technically should populate the tracker display with genuine music data here!
+	\\ But at 20ms per line it fills up with data in a 140ms so is hardly noticable...
+
 	\\ Demo loop
 	.demo_loop
 	{
-		\\ Check for Escape key
+		\\ Check for pressed keys
 		LDA #121
-		LDX #(INKEY_q EOR &80)
+		LDX #&10
 		JSR osbyte
-		TXA
-		BMI exit_demo
+
+		\\ Still holding same key
+		CPX menu_key_held
+		BEQ no_key_pressed
+
+		\\ Remember current key
+		STX menu_key_held
+
+		\\ Any key pressed?
+		CPX #&FF
+		BEQ no_key_pressed
+
+		\\ Check escape
+		CPX #MENU_key_toggle
+		BEQ enter_menu_state
+
+		.no_key_pressed
+
+		\\ Poll the music player
+		LDA player_ended
+		BNE song_ended
 
 		\\ Wait for vsync - NO LONGER WAITING FOR VSYNC
 		;LDA #19
@@ -326,35 +366,300 @@ GUARD &7C00							; ensure code size doesn't hit start of screen memory
 		\\ So all of our vars from the player are fresh
 		\\ Use these to render our demo FX (before next vsync!)
 		\\ May still want to do something clever to avoid flicker
-		
-		\\ Poll our demo
-		JSR poll_demo
 
-		\\ Returns whether player has finished
-		BEQ demo_loop
+		\\ Poll tracker
+		JSR poll_tracker
 
-		.exit_demo
+		\\ Poll our VU effects
+		LDA #&FF				; we do want beat bars
+		JSR poll_fx
+
+		\\ Update scrolltext
+		JSR poll_scr
+
+		\\ Loop
+		JMP demo_loop
+
+		.song_ended
 
 		\\ Deinitialise demo state
 		JSR deinit_demo
+
+		\\ Increment file in table
+		LDX file_no
+		INX
+		CPX #NUM_vgm_files
+		BCC next_file
+		LDX #0
+		.next_file
+		STX file_no
+
+		\\ Automatically load next file
+		JMP loading_state
 	}
 
-\\ ***** Trigger next load ***** \\
+\\ ***** Menu state ***** \\
 
-	\\ Increment file in table
-	LDX file_no
-	INX
-	CPX #NUM_vgm_files
-	BCC next_file
+	.enter_menu_state
+
+	\\ Initialise menu state
+
+	JSR init_menu
+	JSR menu_populate
+
+	\\ Menu loop
+	.menu_loop
+	{
+		\\ Check for pressed keys
+		LDA #121
+		LDX #&10
+		JSR osbyte
+
+		\\ Still holding same key
+		CPX menu_key_held
+		BEQ no_key_pressed
+
+		\\ Remember current key
+		STX menu_key_held
+
+		\\ Any key pressed?
+		CPX #&FF
+		BEQ no_key_pressed
+
+		\\ Check escape
+		CPX #MENU_key_toggle
+		BNE not_escape
+
+		\\ Handle toggle key
+		\\ Revert file no
+		LDA menu_old_file
+		STA file_no
+
+		\\ Cancel menu
+		.cancel_menu
+		JSR deinit_menu
+		JMP enter_demo_state
+
+		.not_escape
+		CPX #MENU_key_up
+		BNE not_up
+
+		\\ Handle up key
+		\\ Decrement file_no no lower than 0
+		LDA file_no
+		BEQ not_up
+		DEC file_no
+
+		\\ Update our menu on screen
+		JSR menu_populate
+		JMP no_key_pressed
+
+		.not_up
+		CPX #MENU_key_down
+		BNE not_down
+
+		\\ Handle down
+		\\ Increment file_no up to MAX
+		LDA file_no
+		CMP #NUM_vgm_files
+		BEQ not_down
+		INC file_no
+
+		\\ Update our menu on screen
+		JSR menu_populate
+		JMP no_key_pressed
+
+		.not_down
+		CPX #MENU_key_select
+		BNE not_select
+
+		\\ Handle select key
+		\\ Check if we're on the same track
+		LDA file_no
+		CMP menu_old_file
+		BEQ cancel_menu
+
+		\\ Deinit the menu
+		JSR deinit_menu
+
+		\\ Deinit the demo
+		JSR deinit_demo
+
+		\\ Either file load or exit
+		LDA file_no
+		CMP #NUM_vgm_files
+		BEQ exit_app
+
+		\\ Load new file
+		JMP loading_state
+
+		.not_select
+		.no_key_pressed
+
+		\\ If track has ended just keep menu around until user action
+		LDA player_ended
+		BEQ sync_to_audio
+		
+		\\ If no audio then sync to vsync instead!
+		LDA #19
+		JSR osbyte
+		BNE skip_audio_sync
+
+		\\ Sync to audio
+		.sync_to_audio
+		LDA player_counter
+		.wait_for_audio_sync
+		CMP player_counter
+		BEQ wait_for_audio_sync
+
+		.skip_audio_sync
+
+		\\ Poll our VU effects
+		LDA #0					; we don't want beat bars
+		JSR poll_fx
+
+		\\ Update scrolltext
+		JSR poll_scr
+
+		\\ Loop
+		JMP menu_loop
+
+		.exit_app
+	}
+
+\\ ***** Exit app entirely ***** \\
+
+	\\ Credits / Outro screen goes here \\
+
+	\\ Exit cleanly - tidy up anything else here!
+	LDA #12: JSR oswrch
+
+	\\ Would be nice to clear escape state and issue BASIC NEW to avoid "Bad Program" error
+
+	.return
+	RTS
+}
+
+
+\ ******************************************************************
+\ *	Menu state routines
+\ ******************************************************************
+
+.init_menu
+{
+	\\ Copy menu overlay to screen - 8x lines from line 14
 	LDX #0
-	.next_file
-	STX file_no
+	.loop
+	LDA MENU_overlay_src_addr, X
+	STA MENU_overlay_dst_addr, X
+	INX
+	BNE loop
 
-\\ ***** Exit demo state ***** \\
+	LDX #(MENU_overlay_size - 1) - &100
+	.loop2
+	LDA MENU_overlay_src_addr + &100, X
+	STA MENU_overlay_dst_addr + &100, X
+	DEX
+	BPL loop2
 
-	JMP enter_loading_state
+	\\ Remember stuff
+	LDA file_no
+	STA menu_old_file
 
-	\\ Exit cleanly (we hope)
+	.return
+	RTS
+}
+
+.menu_populate
+{
+	\\ Populate our menu with entries based on file_no
+	LDA file_no
+	SEC
+	SBC #1
+	TAX
+
+	LDY #MENU_top_line_ypos
+
+	.loop
+	LDA mode7_row_addr_LO,Y
+	STA writeptr
+	LDA mode7_row_addr_HI,Y
+	STA writeptr+1
+
+	TXA:PHA
+	BPL positive
+
+	.clamp
+	\\ Write blank line
+	LDX #MENU_entry_xpos:LDA #MENU_entry_xpos + MENU_entry_width
+	JSR teletexel_erase_row
+	JMP next
+
+	.positive
+	CPX #NUM_vgm_files+1			; include quit option
+	BCS clamp
+	
+	\\ Write entry from loading_table
+	TXA:ASL A:TAX
+
+	LDA menu_table,X
+	STA write_loop+1
+	LDA menu_table+1,X
+	STA write_loop+2
+
+	\\ Store Y
+	TYA:PHA
+
+	LDX #0
+	LDY #MENU_entry_xpos
+	.write_loop
+	LDA menu_entry_1,X
+	STA (writeptr),Y
+	INY
+	INX
+	CPX #MENU_entry_width
+	BNE write_loop
+
+	PLA:TAY
+
+	.next
+	PLA:TAX
+	INX
+
+	INY
+	CPY #TRACKER_dupe_line_ypos
+	BNE not_dupe
+	INY
+	.not_dupe
+	CPY #MENU_bottom_line_ypos + 1
+	BNE loop
+
+	\\ Duplicate line 17 to line 18 for double height
+	LDX #TRACKER_active_line_ypos
+	LDY #TRACKER_dupe_line_ypos
+	JSR mode7_copy_line
+
+	.return
+	RTS
+}
+
+.deinit_menu
+{
+	\\ Copy original tracker back to screen - 8x lines from line 14
+	LDX #0
+	.loop
+	LDA MENU_original_src_addr, X
+	STA MENU_overlay_dst_addr, X
+	INX
+	BNE loop
+
+	LDX #(MENU_overlay_size - 1) - &100
+	.loop2
+	LDA MENU_original_src_addr + &100, X
+	STA MENU_overlay_dst_addr + &100, X
+	DEX
+	BPL loop2
+
 	.return
 	RTS
 }
@@ -760,7 +1065,7 @@ ENDMACRO
 	.poll_scr_line_1_addr
 	STA &7C00,X						; **SELF-MODIFIED CODE**
 
-	LDA mode7_font_data + 40,Y
+	LDA mode7_font_data + MODE7_char_width,Y
 	.poll_scr_line_2_addr
 	STA &7C28,X						; **SELF-MODIFIED CODE**
 
@@ -869,8 +1174,9 @@ ENDMACRO
 	RTS
 }
 
-.poll_fx
+.poll_fx				; A = render beat bars or not (0)
 {
+	PHA					; remember this for later
 
 	\\ render the bar fx in 15 by 5 character columns
 	LDX #0
@@ -952,6 +1258,8 @@ ENDIF
 
 	BNE fx_column_loop
 
+	PLA:BEQ skip_beat_bars
+
 	\\ Render the channel beat bars
 	LDA #0
 	LDX #FX_ch0_x
@@ -965,6 +1273,8 @@ ENDIF
 	LDA #3
 	LDX #FX_ch3_x
 	JSR draw_beat_bar
+
+	.skip_beat_bars
 	
 	\\ Let VU meter values fall to zero
 	LDY #(FX_num_freqs) - 1
@@ -1187,7 +1497,7 @@ ENDIF
 
 MACRO WRITE_VOL_CHAR
 {
-	LDA debug_hexchars, X
+	LDA hex_to_ascii, X
 	STA (writeptr),Y
 }
 ENDMACRO
@@ -1409,17 +1719,10 @@ ENDMACRO
 .deinit_player
 {
 	\\ Zero volume on all channels
-	SEI
-	LDX #&FF: STX &FE43					; R3=Data Direction Register "A" set to output
-	LDA #&9F: STA &FE41					; tone 3 volume OFF
-	SN_WRITE_ENABLE
-	LDA #&BF: STA &FE41					; tone 2 volume OFF
-	SN_WRITE_ENABLE
-	LDA #&DF: STA &FE41					; tone 1 volume OFF
-	SN_WRITE_ENABLE
-	LDA #&FF: STA &FE41					; noise volume OFF
-	SN_WRITE_ENABLE
-	CLI
+	LDA #&9F: JSR psg_strobe
+	LDA #&BF: JSR psg_strobe
+	LDA #&DF: JSR psg_strobe
+	LDA #&FF: JSR psg_strobe
 	
 	.return
 	RTS
@@ -1430,6 +1733,9 @@ ENDMACRO
 	\\ Assume this is called every 20ms..
 	LDA #0
 	STA player_reg_bits
+
+	LDA player_ended
+	BNE _sample_end
 
 	\\ Get next byte from the stream
 	jsr get_decrunched_byte
@@ -1460,8 +1766,12 @@ ENDMACRO
 	RTS
 
 	._player_end
-	INC player_counter				; indicate we have completed another frame of audio?
 	STA player_ended
+
+	\\ Silence sound chip
+	JSR deinit_player
+
+	INC player_counter				; indicate we have completed one last frame of audio
 
 	._sample_end
 	SEC
@@ -1656,21 +1966,18 @@ ENDIF
 \ *	Debug helpers
 \ ******************************************************************
 
-.debug_hexchars
-EQUS "0123456789abcdef"		; actually no longer debug
-
 IF _DEBUG
 .debug_print_A				; trashes X
 {
 	PHA:PHA
 	LSR A:LSR A:LSR A:LSR A
 	TAX
-	LDA debug_hexchars,X
+	LDA hex_to_ascii,X
 	JSR oswrch
 	PLA
 	AND #&0F
 	TAX
-	LDA debug_hexchars,X
+	LDA hex_to_ascii,X
 	JSR oswrch
 	LDA #32
 	JSR oswrch
@@ -1978,18 +2285,23 @@ EQUB LO(vgm_filename_2): EQUB HI(vgm_filename_2)
 EQUB LO(vgm_filename_3): EQUB HI(vgm_filename_3)
 EQUB LO(vgm_filename_4): EQUB HI(vgm_filename_4)
 
-.vgm_filename_1
-EQUS "master", 13
+.vgm_filename_1			EQUS "master", 13
+.vgm_filename_2			EQUS "except", 13
+.vgm_filename_3			EQUS "fluid", 13
+.vgm_filename_4			EQUS "ice", 13
 
-.vgm_filename_2
-EQUS "except", 13
+.menu_table
+EQUB LO(menu_entry_1): EQUB HI(menu_entry_1)
+EQUB LO(menu_entry_2): EQUB HI(menu_entry_2)
+EQUB LO(menu_entry_3): EQUB HI(menu_entry_3)
+EQUB LO(menu_entry_4): EQUB HI(menu_entry_4)
+EQUB LO(menu_entry_5): EQUB HI(menu_entry_5)
 
-.vgm_filename_3
-EQUS "fluid", 13
-
-.vgm_filename_4
-EQUS "ice", 13
-
+.menu_entry_1			EQUS "1. Master.vgm                     "
+.menu_entry_2			EQUS "2. Except.vgm                     "
+.menu_entry_3			EQUS "3. Fluid.vgm                      "
+.menu_entry_4			EQUS "4. Ice.vgm                        "
+.menu_entry_5			EQUS "Exit                              "
 
 \ ******************************************************************
 \ *	Look up tables
@@ -2061,6 +2373,9 @@ EQUB &01, &02, &04, &08, &10, &20, &40, &80
 .noise_note_1 EQUS "Md"
 .noise_note_2 EQUS "Hi"
 .noise_note_3 EQUS "T1"
+
+.hex_to_ascii			; for volume print
+EQUS "0123456789abcdef"
 
 \\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
 \\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
@@ -2166,8 +2481,15 @@ EQUS "Loading... ", 0
 .mode7_screen_data
 INCBIN "screen3.mode7"
 
-.mode7_font_data
+MENU_original_src_addr = mode7_screen_data + MENU_overlay_ypos * MODE7_char_width
+
+.mode7_font_data				; we only use ~256 bytes of this 1k screen BTW
 INCBIN "font_5x5.mode7"
+
+.mode7_menu_data
+INCBIN "menu_overlay.mode7"		; ditto, we only use ~8/25 lines of this screen
+
+MENU_overlay_src_addr = mode7_menu_data + MENU_overlay_ypos * MODE7_char_width
 
 \ ******************************************************************
 \ *	End address to be saved
@@ -2216,5 +2538,9 @@ PUTFILE "fluid_beeb_50.raw.exo", "fluid", 0
 PUTFILE "ice_opt_beeb_50_raw.exo", "ice", 0
 PUTFILE "exception_beeb.raw.exo", "except", 0
 PUTFILE "master_beeb.raw.exo", "master", 0
+
+IF _DEBUG			; only needed for debug purposes
+PUTFILE "screen3.mode7", "screen", &7C00
 PUTFILE "font_5x5.mode7", "font", &7C00
 PUTFILE "menu_overlay.mode7", "menu", &7C00
+ENDIF
