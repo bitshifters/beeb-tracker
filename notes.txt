@@ -8,7 +8,7 @@ Infrastructure
 VGM Pre-process & Player
 - Track length in metadata for tune progress (SM)
 - Track speed in metadata for tracker update? (SM)
-- Mapping from sound data to note notation for tracker (c#3f etc.) (SM)
+- Mapping from sound data to note notation for tracker (c#3f etc.) (SM) - DONE
 - Ability to look ahead into sound data for upcoming tracker
 - Song name & author metadata <- in VGM file or embedded in demo code? (SM)
 - Support for looping tracks?
@@ -23,7 +23,7 @@ Scroll text FX
 VU FX
 - Rewrite to only update changed teletexels not redraw entirely each frame - DONE
 - Any changes to FX in general?
-- Hook up to improved frequency & beat extraction
+- Hook up to improved frequency & beat extraction - DONE
 
 Tracker FX
 - Write tracker display routine! (KC) - DONE (V1)
@@ -43,11 +43,11 @@ Outro FX
 Main Loop
 - State machine for demo logic - DONE (in code not separate state machine routine)
 	- Intro
-	- Menu
-	- Loading
-	- Tracker
+	- Menu - DONE (V1)
+	- Loading - DONE (V1)
+	- Tracker - DONE (V1)
 	- Outro
-- (Would be nice if menu could overlay running tracker?)
+- (Would be nice if menu could overlay running tracker?) - DONE
 - Cleanly kill & restart player - DONE
 - Loader for VGM files - DONE
 - Where is metadata for files etc. stored? - SM: Stuff into RAW file I think?
