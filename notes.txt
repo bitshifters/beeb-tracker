@@ -9,7 +9,7 @@ VGM Pre-process & Player
 - Track length in metadata for tune progress (SM)
 - Track speed in metadata for tracker update? (SM)
 - Mapping from sound data to note notation for tracker (c#3f etc.) (SM) - DONE
-- Ability to look ahead into sound data for upcoming tracker
+- Ability to look ahead into sound data for upcoming tracker - POLISH
 - Song name & author metadata <- in VGM file or embedded in demo code? (SM)
 - Support for looping tracks?
 - Better extraction of frequency & beat data from tune for fx - GOOD ENOUGH! DONE
@@ -17,12 +17,12 @@ VGM Pre-process & Player
 Scroll text FX
 - Smaller font ~ 6x6 pixels per letter - DONE
 - Store font as MODE 7 optimised data (2x3 pixels per byte) - DONE
-- Rewrite for one pixel horizontal scrolling
+- Rewrite for one pixel horizontal scrolling - (KC) - DONE
 - Ability to set scroll text message - DONE
 
 VU FX
 - Rewrite to only update changed teletexels not redraw entirely each frame - DONE
-- Any changes to FX in general?
+- Any changes to FX in general? Maybe flash / wibble logo with white noise beats?
 - Hook up to improved frequency & beat extraction - DONE
 
 Tracker FX
@@ -38,7 +38,7 @@ Intro FX
 - Static MODE 7 screen at minimum
 
 Outro FX
-- Static MODE 7 screen at minimum
+- Static MODE 7 screen at minimum - NOT NEEDED - BREAK TO EXIT
 
 Main Loop
 - State machine for demo logic - DONE (in code not separate state machine routine)
@@ -46,15 +46,25 @@ Main Loop
 	- Menu - DONE (V1)
 	- Loading - DONE (V1)
 	- Tracker - DONE (V1)
-	- Outro
+	- Outro - NOT NEEDED
 - (Would be nice if menu could overlay running tracker?) - DONE
 - Cleanly kill & restart player - DONE
 - Loader for VGM files - DONE
 - Where is metadata for files etc. stored? - SM: Stuff into RAW file I think?
-- (Compile time configuration from a file)
-- Optimise draw routines for raster
+- (Compile time configuration from a file?)
+
+Optimisation
+- Optimise draw routines for raster - doesn't seem to be catching raster at the moment?
+- Reduce code footprint, i.e. remove redundant code, refactor generalised routines for specific case
+- Minimise data sizes, e.g. strip unused lines from MODE 7 screens
+- Find convenient memory locations below PAGE for runtime buffers where possible (check AUG memory map)
 
 Content
 - Pick VGM music files for disk #1 (themed?)
 - Assemble meta data
 - Write scroll text for each file?
+- Finalise team name :)
+
+
+FONT
+http://edit.tf/#0:LuFjB4sYOFiR4sYPFiR4sSOFiRogaLHiRAgaNMCRogQdMDQu3Rte_NJl4MOvBL35sG6FBl5NW6Nrw6sMnBK3UsOvBg1QtS_RA0cLGDxYwcLGDxYwcLEix4kaIGjRA0aIGmTAkyYEizYkLtVLXLwSt0aDK5Yt1bDlzSIGqDLwSqnSB6pauFLBA1QeOLAu42MMDRAsWMFixhg2IHixI4WIFmxI4WMHCxgsWMEDRAgQIC-3il49WHbmw5c0i3ck580mfmk0IUGbmkxc0qBmgQMUCBggIoECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAigQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQICOBZk0LMmBYs0LMmhYs0LFmBYs0INCjYsQINGhA40IEGhh4I6kevVzcquHDVwdaufHUjQKuHvUj14PXBRwdakeTVw4akWoloYaMCzJoWZMCzJoWZMCxYo2LNCDRoQaNCDQoYOFDBwoWPCWpFuVcHWpGhVcs2pHlwc3KDUgVcHSDKl1Jt2BNkQakGDtwJ4FnRB4QKFmRQsyIHDTQsWYFiRQseYFmTAsyKFmRBoQIECAmq7OsXrho58cHNyqWPcXNyq5uUDZAo5uUHN2gxIUGJAgwICaBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECA

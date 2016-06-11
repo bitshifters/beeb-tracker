@@ -79,6 +79,7 @@ SN_FB_WHITENOISE = &04
 \ ******************************************************************
 
 _DEBUG = TRUE
+ENABLE_EXIT = FALSE
 
 \ ******************************************************************
 \ *	Define global macros
@@ -461,7 +462,11 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 		\\ Handle down
 		\\ Increment file_no up to MAX
 		LDA file_no
+		IF ENABLE_EXIT
 		CMP #NUM_vgm_files
+		ELSE
+		CMP #NUM_vgm_files - 1
+		ENDIF
 		BEQ not_down
 		INC file_no
 
@@ -596,7 +601,11 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	JMP next
 
 	.positive
+	IF ENABLE_EXIT
 	CPX #NUM_vgm_files+1			; include quit option
+	ELSE
+	CPX #NUM_vgm_files				; don't include quit option
+	ENDIF
 	BCS clamp
 	
 	\\ Write entry from loading_table
@@ -1035,7 +1044,35 @@ ENDMACRO
 \\{
 	\\ Copy our temp variables for drawing
 	LDA scr_col
+	LSR A
 	STA tmp_cur_col				; current column in font
+
+	\\ Set font load address
+	BCC shifted_font
+
+	\\ Not shifted
+	LDA #LO(mode7_font_data)
+	STA poll_scr_font_line1_addr + 1
+	LDA #HI(mode7_font_data)
+	STA poll_scr_font_line1_addr + 2
+
+	JMP write_second_font_addr
+
+	\\ Shifted by 1 pixel
+	.shifted_font
+	LDA #LO(mode7_font_data_shifted)
+	STA poll_scr_font_line1_addr + 1
+	LDA #HI(mode7_font_data_shifted)
+	STA poll_scr_font_line1_addr + 2
+
+	.write_second_font_addr
+	CLC
+	LDA poll_scr_font_line1_addr + 1
+	ADC #MODE7_char_width
+	STA poll_scr_font_line2_addr + 1
+	LDA poll_scr_font_line1_addr + 2
+	ADC #0
+	STA poll_scr_font_line2_addr + 2
 
 	LDA scr_msg_idx
 	STA tmp_msg_idx				; current index into message
@@ -1061,11 +1098,14 @@ ENDMACRO
 
 	\\ Draw a column of the font to the screen
 	.poll_scr_draw_col
-	LDA mode7_font_data,Y
+
+	.poll_scr_font_line1_addr
+	LDA mode7_font_data_shifted,Y	; **SELF-MODIFIED CODE**
 	.poll_scr_line_1_addr
 	STA &7C00,X						; **SELF-MODIFIED CODE**
 
-	LDA mode7_font_data + MODE7_char_width,Y
+	.poll_scr_font_line2_addr
+	LDA mode7_font_data_shifted + MODE7_char_width,Y ; **SELF-MODIFIED CODE**
 	.poll_scr_line_2_addr
 	STA &7C28,X						; **SELF-MODIFIED CODE**
 
@@ -1093,7 +1133,7 @@ ENDMACRO
 	.poll_scr_done
 	INC scr_col					; increment column for scroll
 	LDA scr_col
-	CMP #3
+	CMP #6
 	BNE poll_scr_return					; 8 columns
 
 	LDA #0
@@ -2466,7 +2506,7 @@ MAPCHAR ' ', 241
 \\ Scrolltext messages stored as font glyph byte offsets
 
 .demo_message
-EQUS "BeebTracker scrolltext in the right place but now too fast! Needs to be one pixel scroll not one byte. 0123456789?!. ", 0
+EQUS "BeebTracker scrolltext in the right place and now scrolled one pixel per frame. Looks pretty smooth! 0123456789?!. ", 0
 
 .load_message
 EQUS "Loading... ", 0
@@ -2483,8 +2523,10 @@ INCBIN "screen3.mode7"
 
 MENU_original_src_addr = mode7_screen_data + MENU_overlay_ypos * MODE7_char_width
 
-.mode7_font_data				; we only use ~256 bytes of this 1k screen BTW
-INCBIN "font_5x5.mode7"
+.mode7_font_data				; we use 16/25 lines of this screen
+INCBIN "font_5x5_shifted.mode7"
+
+mode7_font_data_shifted = mode7_font_data + 8 * 40
 
 .mode7_menu_data
 INCBIN "menu_overlay.mode7"		; ditto, we only use ~8/25 lines of this screen
@@ -2542,5 +2584,6 @@ PUTFILE "master_beeb.raw.exo", "master", 0
 IF _DEBUG			; only needed for debug purposes
 PUTFILE "screen3.mode7", "screen", &7C00
 PUTFILE "font_5x5.mode7", "font", &7C00
+PUTFILE "font_5x5_shifted.mode7", "font2", &7C00
 PUTFILE "menu_overlay.mode7", "menu", &7C00
 ENDIF
