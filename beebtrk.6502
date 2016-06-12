@@ -107,7 +107,7 @@ MODE7_separated = 154
 
 \\ Player
 PLAYER_string_max = 42			; size of our meta data strings (title and author)
-
+PLAYER_sample_rate = 50			; locked to 50Hz
 
 \ ******************************************************************
 \ *	Define app constants
@@ -242,6 +242,7 @@ GUARD &9F
 \\ Meta vars
 .meta_timer				SKIP 1		; countdown timer before updating meta strings
 .meta_idx				SKIP 1		; index into our meta strings
+.meta_poll_count		SKIP 1		; count polls to update clock
 
 \ ******************************************************************
 \ *	Start address to be saved
@@ -743,6 +744,26 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	CPX #META_max_width
 	BNE meta_loop
 
+	\\ Copy clock to screen
+	LDA #LO(META_clock_addr)
+	STA writeptr
+	LDA #HI(META_clock_addr)
+	STA writeptr+1
+
+	LDX meta_clock_mins
+	LDY meta_clock_secs
+	JSR write_clock_at_writeptr
+
+	\\ Copy duration to screen
+	LDA #LO(META_duration_addr)
+	STA writeptr
+	LDA #HI(META_duration_addr)
+	STA writeptr+1
+
+	LDX player_duration_mins
+	LDY player_duration_secs
+	JSR write_clock_at_writeptr
+
 	\\ Hook up Event vector - starts player
 	ldx #LO(demo_eventv)
 	ldy #HI(demo_eventv)
@@ -1210,6 +1231,9 @@ ENDMACRO
 	
 	LDA #0
 	STA meta_idx
+	STA meta_poll_count
+	STA meta_clock_mins
+	STA meta_clock_secs
 
 	LDA #META_scroll_start_delay
 	STA meta_timer
@@ -1241,6 +1265,51 @@ ENDMACRO
 	LDA fx_table + 0, Y
 	STA FX_address_beat+80, X
 
+	RTS
+}
+
+.write_clock_at_writeptr			; X=mins, Y=secs
+{
+	TYA:PHA
+	LDY #0
+
+	CLC
+	TXA
+	ADC #'0'
+	STA (writeptr),Y
+	INY
+
+	LDA #':'
+	STA (writeptr),Y
+	INY
+
+	\\ Count tens
+	PLA
+	LDX #0
+	.loop_10
+	CMP #10
+	BCC done_10
+	SEC
+	SBC #10
+	INX
+	JMP loop_10
+	.done_10
+	PHA
+
+	\\ Write tens
+	CLC
+	TXA
+	ADC #'0'
+	STA (writeptr),Y
+	INY
+
+	\\ Write units
+	PLA
+	ADC #'0'
+	STA (writeptr),Y
+	INY
+
+	.return
 	RTS
 }
 
@@ -1375,84 +1444,124 @@ ENDIF
 	BPL loop2
 	
 	\\ Update meta data
-	DEC meta_timer
-	BNE return
+	{
+		DEC meta_timer
+		BNE done_meta
 	
-	\\ Reset meta scroll timer
-	LDA #META_scroll_update_delay
-	STA meta_timer
+		\\ Reset meta scroll timer
+		LDA #META_scroll_update_delay
+		STA meta_timer
 
-	\\ Update meta index
-	INC meta_idx
-	LDA meta_idx
-	CMP #PLAYER_string_max - META_max_width - 1
-	BEQ longer_wait
-	CMP #PLAYER_string_max - META_max_width
-	BCC meta_no_wrap
+		\\ Update meta index
+		INC meta_idx
+		LDA meta_idx
+		CMP #PLAYER_string_max - META_max_width - 1
+		BEQ longer_wait
+		CMP #PLAYER_string_max - META_max_width
+		BCC meta_no_wrap
 
-	LDA #0
-	STA meta_idx
-	.longer_wait
-	LDA #META_scroll_start_delay
-	STA meta_timer
+		LDA #0
+		STA meta_idx
+		.longer_wait
+		LDA #META_scroll_start_delay
+		STA meta_timer
 
-	\\ Copy meta data to screen
-	.meta_no_wrap
+		\\ Copy meta data to screen
+		.meta_no_wrap
 
-	\\ End of string = idx + width clamped to string length
-	\\ Start of string = end - width clamped to zero
-	CLC
-	LDA meta_idx
-	ADC #META_max_width
-	STA tmp_var				; end
+		\\ End of string = idx + width clamped to string length
+		\\ Start of string = end - width clamped to zero
+		CLC
+		LDA meta_idx
+		ADC #META_max_width
+		STA tmp_var				; end
 	
-	\\ Handle title end
-	CMP player_song_title_len
-	BCC title_end_safe
-	LDA player_song_title_len
-	.title_end_safe
-	SEC
-	SBC #META_max_width		; start
-	BPL title_start_safe
-	LDA #0
-	.title_start_safe
-	CLC
-	ADC #LO(player_song_title)
-	STA title_addr+1
-	LDA #HI(player_song_title)
-	ADC #0
-	STA title_addr+2
+		\\ Handle title end
+		CMP player_song_title_len
+		BCC title_end_safe
+		LDA player_song_title_len
+		.title_end_safe
+		SEC
+		SBC #META_max_width		; start
+		BPL title_start_safe
+		LDA #0
+		.title_start_safe
+		CLC
+		ADC #LO(player_song_title)
+		STA title_addr+1
+		LDA #HI(player_song_title)
+		ADC #0
+		STA title_addr+2
 
-	\\ Handle author end
-	LDA tmp_var
-	CMP player_song_author_len
-	BCC author_end_safe
-	LDA player_song_author_len
-	.author_end_safe
-	SEC
-	SBC #META_max_width		; start
-	BPL author_start_safe
-	LDA #0
-	.author_start_safe
-	CLC
-	ADC #LO(player_song_author)
-	STA author_addr+1
-	LDA #HI(player_song_author)
-	ADC #0
-	STA author_addr+2
+		\\ Handle author end
+		LDA tmp_var
+		CMP player_song_author_len
+		BCC author_end_safe
+		LDA player_song_author_len
+		.author_end_safe
+		SEC
+		SBC #META_max_width		; start
+		BPL author_start_safe
+		LDA #0
+		.author_start_safe
+		CLC
+		ADC #LO(player_song_author)
+		STA author_addr+1
+		LDA #HI(player_song_author)
+		ADC #0
+		STA author_addr+2
 
-	LDX #0
-	.meta_loop
-	.title_addr
-	LDA player_song_title,X
-	STA META_title_addr,X
-	.author_addr
-	LDA player_song_author,X
-	STA META_author_addr,X
-	INX
-	CPX #META_max_width
-	BNE meta_loop
-		
+		LDX #0
+		.meta_loop
+		.title_addr
+		LDA player_song_title,X
+		STA META_title_addr,X
+		.author_addr
+		LDA player_song_author,X
+		STA META_author_addr,X
+		INX
+		CPX #META_max_width
+		BNE meta_loop
+		.done_meta
+	}
+
+	\\ Increment counter for clock
+	{
+		INC meta_poll_count
+		LDA meta_poll_count
+		CMP #PLAYER_sample_rate
+		BNE not_sec_yet
+
+		\\ Reset counter
+		LDA #0
+		STA meta_poll_count
+
+		\\ Update 1 second
+		INC meta_clock_secs
+		LDA meta_clock_secs
+		CMP #60
+		BNE not_min_yet
+
+		\\ Update 1 min
+		INC meta_clock_mins
+		LDA #0
+		STA meta_clock_secs
+
+		.not_min_yet
+
+		\\ Display clock
+		LDA #LO(META_clock_addr)
+		STA writeptr
+		LDA #HI(META_clock_addr)
+		STA writeptr+1
+
+		LDX meta_clock_mins
+		LDY meta_clock_secs
+		JSR write_clock_at_writeptr
+
+		.not_sec_yet
+	}
+
 	.return
 	RTS
 }
@@ -1869,7 +1978,7 @@ ENDMACRO
 \\  [byte] - indicates the required playback rate in Hz eg. 50/60/100
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
-	CMP #50						; we only support 50Hz files
+	CMP #PLAYER_sample_rate		; we only support 50Hz files
 	BEQ is_50HZ					; return non-zero to indicate error
 	JMP error
 	.is_50HZ
@@ -2063,6 +2172,7 @@ ENDMACRO
 	
 	.wait_20_ms
 	INC player_counter				; indicate we have completed another frame of audio
+
 	CLC
 	RTS
 
@@ -2818,6 +2928,9 @@ MENU_overlay_src_addr = mode7_menu_data + MENU_overlay_ypos * MODE7_char_width
 .freq_array				SKIP FX_num_freqs
 .chan_array				SKIP FX_num_channels
 .player_reg_vals		SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
+
+.meta_clock_mins		SKIP 1
+.meta_clock_secs		SKIP 1
 
 \\ Copied out of the RAW VGM header
 .player_packet_count	SKIP 2		; number of packets
