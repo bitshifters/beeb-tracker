@@ -105,13 +105,16 @@ MODE7_graphic_black = 144
 MODE7_contiguous = 153
 MODE7_separated = 154
 
+\\ Player
+PLAYER_string_max = 42			; size of our meta data strings (title and author)
+
 
 \ ******************************************************************
 \ *	Define app constants
 \ ******************************************************************
 
 \\ Number of entries in our file table
-NUM_vgm_files = 4				; size of our file table
+NUM_vgm_files = 6				; size of our file table
 
 \\ VU & beat bar FX
 FX_num_freqs = 32				; number of VU bars - can be 16 or 32
@@ -162,6 +165,14 @@ MENU_key_up = IKN_up
 MENU_key_down = IKN_down
 MENU_key_select = IKN_return
 
+META_title_addr = MODE7_base_addr + 3 * MODE7_char_width + 9			; title displayed at (9, 3)
+META_author_addr = MODE7_base_addr + 4 * MODE7_char_width + 9			; auther dispayed at (9, 4)
+META_max_width = 30														; 30 chars available
+META_scroll_start_delay = 100											; 2 seconds - time before meta data strings scroll
+META_scroll_update_delay = 10											; 0.2 seconds - scroll speed of meta data strings
+
+META_clock_addr = MODE7_base_addr + 6 * MODE7_char_width + 3			; clock displayed at (3, 6)
+META_duration_addr = MODE7_base_addr + 6 * MODE7_char_width + 33		; duration displayed at (33, 6)
 
 \ ******************************************************************
 \ *	Define fast (zero page) runtime variables
@@ -191,7 +202,6 @@ GUARD &9F
 .player_ended			SKIP 1		; non-zero when player has reached end of tune
 .player_data			SKIP 1		; temporary variable when decoding sound data - must be separate as player running on events
 .player_last_reg		SKIP 1		; last channel (register) refered to by the VGM sound data
-
 .player_counter			SKIP 1		; increments by 1 every poll (20ms) - used as our tracker line no. & to sync fx with audio update
 .player_reg_bits		SKIP 1		; bits 0 - 7 set if SN register 0 - 7 updated this frame, cleared at start of player poll
 
@@ -229,6 +239,9 @@ GUARD &9F
 \\ System vars
 .old_eventv				SKIP 2
 
+\\ Meta vars
+.meta_timer				SKIP 1		; countdown timer before updating meta strings
+.meta_idx				SKIP 1		; index into our meta strings
 
 \ ******************************************************************
 \ *	Start address to be saved
@@ -716,8 +729,19 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	LDY #HI(VGM_stream_data - 1)
 	JSR init_decruncher
 
-	\\ Initialise music player - consumes first crunched byte
+	\\ Initialise music player - parses header
 	JSR	init_player
+
+	\\ Copy meta data to screen
+	LDX #0
+	.meta_loop
+	LDA player_song_title,X
+	STA META_title_addr,X
+	LDA player_song_author,X
+	STA META_author_addr,X
+	INX
+	CPX #META_max_width
+	BNE meta_loop
 
 	\\ Hook up Event vector - starts player
 	ldx #LO(demo_eventv)
@@ -1184,6 +1208,12 @@ ENDMACRO
 	STA FX_address_row4-1, X
 	STA FX_address_row4-1, X
 	
+	LDA #0
+	STA meta_idx
+
+	LDA #META_scroll_start_delay
+	STA meta_timer
+
 	.return
 	RTS
 }
@@ -1344,7 +1374,85 @@ ENDIF
 	DEY
 	BPL loop2
 	
+	\\ Update meta data
+	DEC meta_timer
+	BNE return
 	
+	\\ Reset meta scroll timer
+	LDA #META_scroll_update_delay
+	STA meta_timer
+
+	\\ Update meta index
+	INC meta_idx
+	LDA meta_idx
+	CMP #PLAYER_string_max - META_max_width - 1
+	BEQ longer_wait
+	CMP #PLAYER_string_max - META_max_width
+	BCC meta_no_wrap
+
+	LDA #0
+	STA meta_idx
+	.longer_wait
+	LDA #META_scroll_start_delay
+	STA meta_timer
+
+	\\ Copy meta data to screen
+	.meta_no_wrap
+
+	\\ End of string = idx + width clamped to string length
+	\\ Start of string = end - width clamped to zero
+	CLC
+	LDA meta_idx
+	ADC #META_max_width
+	STA tmp_var				; end
+	
+	\\ Handle title end
+	CMP player_song_title_len
+	BCC title_end_safe
+	LDA player_song_title_len
+	.title_end_safe
+	SEC
+	SBC #META_max_width		; start
+	BPL title_start_safe
+	LDA #0
+	.title_start_safe
+	CLC
+	ADC #LO(player_song_title)
+	STA title_addr+1
+	LDA #HI(player_song_title)
+	ADC #0
+	STA title_addr+2
+
+	\\ Handle author end
+	LDA tmp_var
+	CMP player_song_author_len
+	BCC author_end_safe
+	LDA player_song_author_len
+	.author_end_safe
+	SEC
+	SBC #META_max_width		; start
+	BPL author_start_safe
+	LDA #0
+	.author_start_safe
+	CLC
+	ADC #LO(player_song_author)
+	STA author_addr+1
+	LDA #HI(player_song_author)
+	ADC #0
+	STA author_addr+2
+
+	LDX #0
+	.meta_loop
+	.title_addr
+	LDA player_song_title,X
+	STA META_title_addr,X
+	.author_addr
+	LDA player_song_author,X
+	STA META_author_addr,X
+	INX
+	CPX #META_max_width
+	BNE meta_loop
+		
 	.return
 	RTS
 }
@@ -1739,20 +1847,164 @@ ENDMACRO
 \ *	VGM music player
 \ ******************************************************************
 
-.init_player
+.init_player				; return non-zero if error
 {
-	\\ Consume sample rate byte
+\\ <header section>
+\\  [byte] - header size - indicates number of bytes in header section
+
+	LDA #1
+	STA player_packet_offset
+
 	jsr get_decrunched_byte
+	STA tmp_var
+	CMP #5
+	BCS parse_header			; we need at least 5 bytes to parse!
+	JMP error
+
+	.parse_header
+	CLC
+	ADC player_packet_offset
+	STA player_packet_offset
+
+\\  [byte] - indicates the required playback rate in Hz eg. 50/60/100
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	CMP #50						; we only support 50Hz files
+	BEQ is_50HZ					; return non-zero to indicate error
+	JMP error
+	.is_50HZ
+	DEC tmp_var
+
+\\  [byte] - packet count lsb
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	STA player_packet_count
+	DEC tmp_var
+
+\\  [byte] - packet count msb
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	STA player_packet_count+1
+	DEC tmp_var
+
+\\  [byte] - duration minutes
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	STA player_duration_mins
+	DEC tmp_var
+
+\\  [byte] - duration seconds
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	STA player_duration_secs
+
+	.header_loop
+	DEC tmp_var
+	BEQ done_header
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	\\ don't know what this byte is so ignore it
+	JMP header_loop
+
+	.done_header
+
+\\ <title section>
+\\  [byte] - title string size
+
+	INC player_packet_offset
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	STA tmp_var
+
+	CLC
+	ADC player_packet_offset
+	STA player_packet_offset
+
+\\  [dd] ... - ZT title string
+
+	LDX #0
+	.title_loop
+	STX tmp_msg_idx
+	LDA tmp_var
+	BEQ done_title				; make sure we consume all the title string
+	DEC tmp_var
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	LDX tmp_msg_idx
+	CPX #PLAYER_string_max
+	BCS title_loop				; don't write if buffer full
+	STA player_song_title,X
+	INX
+	JMP title_loop
+
+	\\ Where title string is smaller than our buffer
+	.done_title
+	STX player_song_title_len
+	LDA #' '
+	.title_pad_loop
+	CPX #PLAYER_string_max
+	BCS done_title_padding
+	STA player_song_title,X
+	INX
+	JMP title_pad_loop
+	.done_title_padding
+
+\\ <author section>
+\\  [byte] - author string size
+
+	INC player_packet_offset
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	STA tmp_var
+
+	CLC
+	ADC player_packet_offset
+	STA player_packet_offset
+
+\\  [dd] ... - ZT author string
+
+	LDX #0
+	.author_loop
+	STX tmp_msg_idx
+	LDA tmp_var
+	BEQ done_author				; make sure we consume all the author string
+	DEC tmp_var
+
+	jsr get_decrunched_byte		; should really check carry status for EOF
+	LDX tmp_msg_idx
+	CPX #PLAYER_string_max
+	BCS author_loop
+	STA player_song_author,X	; don't write if buffer full
+	INX
+	JMP author_loop
+
+	\\ Where author string is smaller than our buffer
+	.done_author
+	STX player_song_author_len
+	LDA #' '
+	.author_pad_loop
+	CPX #PLAYER_string_max
+	BCS done_author_padding
+	STA player_song_author,X
+	INX
+	JMP author_pad_loop
+	.done_author_padding
+
+	\\ Initialise vars
+	LDA #&FF
+	STA player_counter
 
 	LDA #0
 	STA player_ended
 	STA player_last_reg
 	STA player_reg_bits
 
-	LDA #&FF
-	STA player_counter
+	\\ Return zero 
+	RTS
 
-	.return
+	\\ Return error
+	.error
+	LDA #&FF
 	RTS
 }
 
@@ -1776,6 +2028,15 @@ ENDMACRO
 
 	LDA player_ended
 	BNE _sample_end
+
+\\ <packets section>
+\\  [byte] - indicating number of data writes within the current packet (max 11)
+\\  [dd] ... - data
+\\  [byte] - number of data writes within the next packet
+\\  [dd] ... - data
+\\  ...`
+\\ <eof section>
+\\  [0xff] - eof
 
 	\\ Get next byte from the stream
 	jsr get_decrunched_byte
@@ -2324,11 +2585,15 @@ EQUB LO(vgm_filename_1): EQUB HI(vgm_filename_1)
 EQUB LO(vgm_filename_2): EQUB HI(vgm_filename_2)
 EQUB LO(vgm_filename_3): EQUB HI(vgm_filename_3)
 EQUB LO(vgm_filename_4): EQUB HI(vgm_filename_4)
+EQUB LO(vgm_filename_5): EQUB HI(vgm_filename_5)
+EQUB LO(vgm_filename_6): EQUB HI(vgm_filename_6)
 
 .vgm_filename_1			EQUS "master", 13
 .vgm_filename_2			EQUS "except", 13
 .vgm_filename_3			EQUS "fluid", 13
 .vgm_filename_4			EQUS "ice", 13
+.vgm_filename_5			EQUS "sonic", 13
+.vgm_filename_6			EQUS "pharoah", 13
 
 .menu_table
 EQUB LO(menu_entry_1): EQUB HI(menu_entry_1)
@@ -2336,12 +2601,16 @@ EQUB LO(menu_entry_2): EQUB HI(menu_entry_2)
 EQUB LO(menu_entry_3): EQUB HI(menu_entry_3)
 EQUB LO(menu_entry_4): EQUB HI(menu_entry_4)
 EQUB LO(menu_entry_5): EQUB HI(menu_entry_5)
+EQUB LO(menu_entry_6): EQUB HI(menu_entry_6)
+EQUB LO(menu_entry_exit): EQUB HI(menu_entry_exit)
 
 .menu_entry_1			EQUS "1. Master.vgm                     "
 .menu_entry_2			EQUS "2. Except.vgm                     "
 .menu_entry_3			EQUS "3. Fluid.vgm                      "
 .menu_entry_4			EQUS "4. Ice.vgm                        "
-.menu_entry_5			EQUS "Exit                              "
+.menu_entry_5			EQUS "5. Sonic.vgm                      "
+.menu_entry_6			EQUS "6. Pharoah.vgm                    "
+.menu_entry_exit		EQUS "Exit                              "
 
 \ ******************************************************************
 \ *	Look up tables
@@ -2550,6 +2819,17 @@ MENU_overlay_src_addr = mode7_menu_data + MENU_overlay_ypos * MODE7_char_width
 .chan_array				SKIP FX_num_channels
 .player_reg_vals		SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
 
+\\ Copied out of the RAW VGM header
+.player_packet_count	SKIP 2		; number of packets
+.player_packet_offset	SKIP 1		; offset from start of file to beginning of packet data
+.player_duration_mins	SKIP 1		; song duration (mins)
+.player_duration_secs	SKIP 1		; song duration (secs)
+
+.player_song_title_len	SKIP 1
+.player_song_title		SKIP PLAYER_string_max
+.player_song_author_len	SKIP 1
+.player_song_author		SKIP PLAYER_string_max
+
 \\ Params block for osfile command
 .osfile_params			SKIP 18
 
@@ -2576,10 +2856,12 @@ ALIGN &100
 \ ******************************************************************
 
 SAVE "BeebTrk", start, end
-PUTFILE "fluid_beeb_50.raw.exo", "fluid", 0
-PUTFILE "ice_opt_beeb_50_raw.exo", "ice", 0
-PUTFILE "exception_beeb.raw.exo", "except", 0
-PUTFILE "master_beeb.raw.exo", "master", 0
+PUTFILE "BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "fluid", 0
+PUTFILE "ice.raw.exo", "ice", 0
+PUTFILE "BotB 7383 exception.raw.exo", "except", 0
+PUTFILE "BotB 7832 MasterTracker.raw.exo", "master", 0
+PUTFILE "BotB 4406 sonic_enters_a_dance_club.raw.exo", "sonic", 0
+PUTFILE "BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "pharoah", 0
 
 IF _DEBUG			; only needed for debug purposes
 PUTFILE "screen3.mode7", "screen", &7C00
