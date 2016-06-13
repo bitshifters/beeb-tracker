@@ -138,6 +138,11 @@ FX_ch1_x = 17
 FX_ch2_x = 24
 FX_ch3_x = 31
 
+\\ Playtime bar locations
+FX_playtime_address = MODE7_base_addr + 40*6 + 8
+FX_playtime_chrs = 24
+FX_playtime_width = (FX_playtime_chrs*2)-1	; SM: rounding hack. 48 really. 8bit precision is fun.
+
 \\ Tracker screen setup
 TRACKER_lineno_field_xpos = 4
 TRACKER_ch3_field_xpos = 12
@@ -243,6 +248,11 @@ GUARD &9F
 .meta_timer				SKIP 1		; countdown timer before updating meta strings
 .meta_idx				SKIP 1		; index into our meta strings
 .meta_poll_count		SKIP 1		; count polls to update clock
+
+\\ Playback timer vars
+.playtime_interval		SKIP 2		; number of audio frames before playtime bar advances by 1 pixel
+.playtime_counter		SKIP 2
+.playtime_index			SKIP 1		; current X offset of playtime bar (0-47)
 
 \ ******************************************************************
 \ *	Start address to be saved
@@ -763,6 +773,36 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	LDX player_duration_mins
 	LDY player_duration_secs
 	JSR write_clock_at_writeptr
+	
+	\\ Setup the playtime bar
+	LDA player_packet_count
+	STA playtime_interval
+	LDA player_packet_count+1
+	STA playtime_interval+1
+	LDA #FX_playtime_width
+	STA playtime_index
+
+	\\ Divide total packet count by FX_playtime_width using 16bit/8bit math = 16bit result
+	LDX #16
+	LDA #0
+	.div_loop
+	ASL playtime_interval
+	ROL playtime_interval+1
+	ROL A
+	CMP playtime_index
+	BCC no_sub
+	SBC playtime_index
+	INC playtime_interval
+	.no_sub
+	DEX
+	BNE div_loop
+	
+	\\ A contains remainder but we discard as we dont need accuracy
+	\\ playtime_interval now contains # of 50Hz updates before playtime_index should be incremented
+	LDA #0
+	STA playtime_index
+	STA playtime_counter
+	STA playtime_counter+1
 
 	\\ Hook up Event vector - starts player
 	ldx #LO(demo_eventv)
@@ -1229,6 +1269,21 @@ ENDMACRO
 	STA FX_address_row4-1, X
 	STA FX_address_row4-1, X
 	
+	\\ code to reset the playtime bar, serves two purposes:
+	\\ 1) resets the mockup
+	\\ 2) erases any bars from the previously played track
+	LDA #160+12
+	LDX #FX_playtime_chrs-1
+	.clear_playtime_loop
+	STA FX_playtime_address, X
+	DEX
+	BPL clear_playtime_loop
+	\\ set the first bar up
+	LDA #160+29
+	STA FX_playtime_address
+	
+	
+	\\ init meta data vars
 	LDA #0
 	STA meta_idx
 	STA meta_poll_count
@@ -1442,6 +1497,48 @@ ENDIF
 	.zero2
 	DEY
 	BPL loop2
+	
+	\\ Update playtime bar
+	INC playtime_counter
+	BNE no_hi
+	INC playtime_counter+1
+	.no_hi
+	LDA playtime_counter
+	CMP playtime_interval
+	BNE not_yet
+	LDA playtime_counter+1
+	CMP playtime_interval+1
+	BNE not_yet
+	
+	\\ reset counter
+	LDA #0
+	STA playtime_counter
+	STA playtime_counter+1
+	
+	\\ clear current graphic at offset (we'll update next chr in a mo)
+	LDA playtime_index
+	LSR A
+	TAX
+	LDA #160+12
+	STA FX_playtime_address, X
+	
+	\\ increment playtime offset & render new bar graphic
+	INC playtime_index
+
+	\\ get the index, find chr X (index>>1, since 2 pixels per chr)
+	LDA playtime_index
+	TAY
+	LSR A
+	TAX
+	TYA
+	AND #1	; odd or even, lookup graphic chr
+	TAY
+	LDA playtime_table, Y
+	STA FX_playtime_address, X
+	
+	.not_yet
+	
+	
 	
 	\\ Update meta data
 	{
@@ -2784,6 +2881,9 @@ EQUB 160+95, 160+95, 160+95, 160+95, 160+80
 EQUB 160+95, 160+95, 160+95, 160+95, 160+92
 EQUB 160+95, 160+95, 160+95, 160+95, 160+95
 EQUB 160+95, 160+95, 160+95, 160+95, 160+95	; last row copied to enable fixed bar effect
+
+.playtime_table
+EQUB 160+29, 160+78	; 160+12 for 'empty' middle line dash
 
 .num_to_bit				; look up bit N
 EQUB &01, &02, &04, &08, &10, &20, &40, &80

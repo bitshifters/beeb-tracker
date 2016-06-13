@@ -6,11 +6,11 @@ Infrastructure
 - Multiple source files (demo, player, exo) for library reuse
 
 VGM Pre-process & Player
-- Track length in metadata for tune progress (SM)
-- Track speed in metadata for tracker update? (SM)
+- Track length in metadata for tune progress (SM) DONE
+- Track speed in metadata for tracker update? (SM) 
 - Mapping from sound data to note notation for tracker (c#3f etc.) (SM) - DONE
 - Ability to look ahead into sound data for upcoming tracker - POLISH
-- Song name & author metadata <- in VGM file or embedded in demo code? (SM)
+- Song name & author metadata <- in VGM file or embedded in demo code? (SM) DONE
 - Support for looping tracks?
 - Better extraction of frequency & beat data from tune for fx - GOOD ENOUGH! DONE
 
@@ -27,11 +27,11 @@ VU FX
 
 Tracker FX
 - Write tracker display routine! (KC) - DONE (V1)
-- Timer display routine (SM)
+- Timer display routine (SM) DONE
 
 Loader FX
 - Static MODE 7 screen at minimum
-- Ideally animated - perhaps MODE 7 vector routines?
+- Ideally animated - perhaps MODE 7 vector routines? 
 - Ability to drive animation on events whilst loading - DONE
 
 Intro FX
@@ -50,14 +50,15 @@ Main Loop
 - (Would be nice if menu could overlay running tracker?) - DONE
 - Cleanly kill & restart player - DONE
 - Loader for VGM files - DONE
-- Where is metadata for files etc. stored? - SM: Stuff into RAW file I think?
-- (Compile time configuration from a file?)
+- Where is metadata for files etc. stored? - SM: Stuff into RAW file I think? DONE
+- (Compile time configuration from a file?) - N/A
 
 Optimisation
 - Optimise draw routines for raster - doesn't seem to be catching raster at the moment?
 - Reduce code footprint, i.e. remove redundant code, refactor generalised routines for specific case
 - Minimise data sizes, e.g. strip unused lines from MODE 7 screens
 - Find convenient memory locations below PAGE for runtime buffers where possible (check AUG memory map)
+
 
 Content
 - Pick VGM music files for disk #1 (themed?)
@@ -68,3 +69,7 @@ Content
 
 FONT
 http://edit.tf/#0:LuFjB4sYOFiR4sYPFiR4sSOFiRogaLHiRAgaNMCRogQdMDQu3Rte_NJl4MOvBL35sG6FBl5NW6Nrw6sMnBK3UsOvBg1QtS_RA0cLGDxYwcLGDxYwcLEix4kaIGjRA0aIGmTAkyYEizYkLtVLXLwSt0aDK5Yt1bDlzSIGqDLwSqnSB6pauFLBA1QeOLAu42MMDRAsWMFixhg2IHixI4WIFmxI4WMHCxgsWMEDRAgQIC-3il49WHbmw5c0i3ck580mfmk0IUGbmkxc0qBmgQMUCBggIoECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAigQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQICOBZk0LMmBYs0LMmhYs0LFmBYs0INCjYsQINGhA40IEGhh4I6kevVzcquHDVwdaufHUjQKuHvUj14PXBRwdakeTVw4akWoloYaMCzJoWZMCzJoWZMCxYo2LNCDRoQaNCDQoYOFDBwoWPCWpFuVcHWpGhVcs2pHlwc3KDUgVcHSDKl1Jt2BNkQakGDtwJ4FnRB4QKFmRQsyIHDTQsWYFiRQseYFmTAsyKFmRBoQIECAmq7OsXrho58cHNyqWPcXNyq5uUDZAo5uUHN2gxIUGJAgwICaBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECA
+SCREEN
+http://edit.tf/#0:NEUDD_vaf16X-vS_97Rf_X6n_3Q_-6H_3U1_6n6_U_-oGCA0TzNf-5j_WIP6xB_3MUH9Bq-99T3_qaoNT1jqepNT3ug7pDRJAh__kv_40__Gn_8lQf0Gpr_1Nf6r6_1Nf-r781Nf6BCgQIEFPfuzug0Lf0hIKGjD0QTMufLuyIN-ZB00ZUFDRh5b1y5BB69NG_k6DQtOzZ5QQt-Lnr8oEyDpoyoO-HTsy8uaDJlXLi_hYsWLFixYsWLFixYsWLFixYsWLFixYsWLFixYsWLFizogLtQbB0zYlXqxYsWLFixYsWLFm5YsWLFixYsWbgbR0zZF9SAv7WLFixYsWLFixYsWLFixYsWLFixYsWLFixYsWLFixYs7oC7Uj7a_2v9r_a_2v9r_a_2v9r_a_2v9r_a_2v9r_aoEBfUgLtSftr_a_2v9r_a_2v9r_a_2v9r_a_2v9r_a_2v9qgQF9SAu1J-2v9r_a_2v9r_a_2v9r_a_2v9r_a_2v9r_a_2qBAX1IC7Ul7a_2v9r_a_2v9r_a_2v9r_a_2v9r_a_2v9r_aoEBfUgLtSXtr_a_2v9r_a_2v9r_a_2v9r_a_2v9r_a_2v9qgQF9SAu9WLFixYsWLFixYsWLFixYsWLFixYsWLFixYsWLFixYs3IC7UIgYMWTNAR_hMd9mzI8AmO-zzEUATHfZ5iKAJjvs8xfUgLtQiBgxZM0BP-EWrVuUn_CLVq3MT-BFq1bmJoAi1atzF9SAu1CIGDFkzQEv4RatW5iX8ItWrcxL-EWrVuYl8CLVq3MX1IDo0IgYMWTNAgQIMd9nmQIEGNayzIECDHfZ5kCBBjvtUCBAgLoECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAu1QBGDFkzQF2oRatW5i7UItWrcxdqEWrVuYu1CLVq3MX1IC7VAEYMWTNAXahFq1bmLtQi1atzF2oRatW5i7UItWrcxfUgLtUARgxZM0BdqEWrVuYu1CLVq3MXahFq1bmLtQi1atzF9SAurWLFixYsWLFqxYsWLFi1YsWLFixasWLFixYtWLFixYsToC5r40cLMCzQs0LGjRA0QLHiR4sUMHCjYsQfNnz58-fFnxAgLGv7Xk5VcNSDVwa9WHVggaoO_HAmyINSBB___Pn738_f0CA
+LOADING
+http://edit.tf/#0:Imv-xB-ToHixJqUtECzYs0bNjBBo2MHixJowPEDxIg1bUCAma972H9Yg6vEGpf1QINSBV--JUDZZt6oECh_0QfViDV-QICRr-sS_ViResXKliNAgVIEG9UsQJUCpUsSIEqpAuWLESZWgQIEFPfuzug0Lf0hIKGjD0QTMufLuyIN-ZB00ZUFDRh5b1y5BB69NG_k6DQtOzZ5QQt-Lnr8oEyDpoyoO-HTsy8uaDJlXLi_hYsWLFixYsWLFixYsWLFixYsWLFixYsWLFixYsWLFizogL9QbB0zYlXqxYsWLFixYsWLFm5YsWLFixYsWbgbR0zZF9SAv6WLFixYsWLFixYsWLFixYsWLFixYsWLFixYsWLFixYs7oC7Uj_1Nf-pr_QIECBAgQIECBAgQIECBAgQIECBBw0NP5fUgLtSf_U1_6mv9AgQIECBAgQIECBAgQIECDAw-amv_U1_l9SAu1J_9TX_qa_0CBAgQIECBAgQIECDhoaf9TX_qa_9TX-X1IC7Ul_1Nf-pr_wMECBAgQIEGBh81Nf-pr_1Nf-pr_1Nf5fUgLtSX_U1_6mv_U1_6GnDQ0_6mv_U1_6mv_U1_6mv_U1_l9SAu9WLFixYsWLFixYsWLFixYsWLFixYsWLFixYsWLFixYs3IAJ0HTizIsOogqUoMOWgQIECBAgQIECBAgQIECBAgLoC6AucL_fnz58-fPnz58-fPnz58-fPnz58-fPnz58-fPnz58-fPyAOdCMV1SlBhy0DFAtQQpkGQghTIMhBCmQZCCFMgyEEKYX1HDo0KyXVKUGHLQMkC1BCmQZCCFMgyEEKZBkIIUyDIQQpiBAgLoECBAgqIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAOdCM11SlBhy0DNAtQQpkGQghTIMhBCmQZCCFMgyEEKYX1HA50I0XVKUGHLQNEC1BCmQZCCFMgyEEKZBkIIUyDIQQphfUcDnQjVdUpQYctA1QLUEKZBkIIUyDIQQpkGQghTIMhBCmF9RwurXr169evXr169evXr169evXr169evXr169evXr169evToC5r-1cLMCzQs0LGjRA0QLHiR4sUMHCjYsQfNnz58-fFnxAgLGv7Xk5VcNSDVwa9WHVggaoO_HAmyINSBB___Pn738_f0CA
