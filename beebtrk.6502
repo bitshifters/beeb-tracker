@@ -75,11 +75,14 @@ SN_FB_WHITENOISE = &04
 
 
 \ ******************************************************************
-\ *	Define debug flags
+\ *	Define compilation flags
 \ ******************************************************************
 
-_DEBUG = TRUE
-ENABLE_EXIT = FALSE
+CODE_ORIGIN = &1100					; assuming standard BBC Micro DFS this is safe!
+_DEBUG = TRUE						; include extra stuff for debugging
+
+COMPILE_OPTION_EXIT = FALSE			; enable "Exit" in selection menu
+
 
 \ ******************************************************************
 \ *	Define global macros
@@ -91,7 +94,8 @@ ENABLE_EXIT = FALSE
 \ ******************************************************************
 
 \\ EXOMISER (compression library)
-EXO_buffer_len = 1024
+EXO_buffer_len = 1024			; this is now packed in to language workspace at &0400
+\\ If you want to make this bigger than 1024 then need to find somewhere else to put it!!
 
 \\ MODE 7
 MODE7_base_addr = &7C00
@@ -109,12 +113,13 @@ MODE7_separated = 154
 PLAYER_string_max = 42			; size of our meta data strings (title and author)
 PLAYER_sample_rate = 50			; locked to 50Hz
 
+
 \ ******************************************************************
 \ *	Define app constants
 \ ******************************************************************
 
 \\ Number of entries in our file table
-NUM_vgm_files = 6				; size of our file table
+NUM_vgm_files = 12
 
 \\ VU & beat bar FX
 FX_num_freqs = 32				; number of VU bars - can be 16 or 32
@@ -157,11 +162,11 @@ TRACKER_bottom_line_ypos = 21
 
 \\ Menu screen setup
 MENU_entry_xpos = 3
-MENU_entry_width = 34
+MENU_entry_width = 32									; if this changes from 32 then need to change code!
 MENU_top_line_ypos = 16
 MENU_bottom_line_ypos = 21
 MENU_overlay_ypos = 14
-MENU_overlay_size = 8 * MODE7_char_width				; 8 lines of 40 chars
+MENU_overlay_size = 9 * MODE7_char_width				; 9 lines of 40 chars for our menu
 MENU_overlay_dst_addr = MODE7_base_addr + MENU_overlay_ypos * MODE7_char_width
 
 \\ Menu key config
@@ -179,9 +184,29 @@ META_scroll_update_delay = 10											; 0.2 seconds - scroll speed of meta dat
 META_clock_addr = MODE7_base_addr + 6 * MODE7_char_width + 3			; clock displayed at (3, 6)
 META_duration_addr = MODE7_base_addr + 6 * MODE7_char_width + 33		; duration displayed at (33, 6)
 
+
 \ ******************************************************************
 \ *	Define fast (zero page) runtime variables
 \ ******************************************************************
+
+ORG &00
+GUARD &70
+
+\\ Frequency array for vu-meter effect, plus beat bars for 4 channels
+\\ These two must be contiguous in memory
+.freq_array				SKIP FX_num_freqs
+.chan_array				SKIP FX_num_channels
+.player_reg_vals		SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
+
+\\ Copied out of the RAW VGM header
+.player_packet_count	SKIP 2		; number of packets
+.player_duration_mins	SKIP 1		; song duration (mins)
+.player_duration_secs	SKIP 1		; song duration (secs)
+
+.player_packet_offset	SKIP 1		; offset from start of file to beginning of packet data
+
+\\ Params block for osfile command
+.osfile_params			SKIP 18
 
 \\ EXOMISER (compression library)
 EXO_zp_src_hi = $70
@@ -201,7 +226,7 @@ EXO_zp_dest_bi = EXO_zp_dest_hi + 2	; dest addr hi
 
 \\ Our own app variables
 ORG &7B
-GUARD &9F
+GUARD &9F							; user ZP + econet ZP
 
 \\ Player vars
 .player_ended			SKIP 1		; non-zero when player has reached end of tune
@@ -232,10 +257,6 @@ GUARD &9F
 .scr_col				SKIP 1		; current column in first character to be displayed
 .scr_y					SKIP 1		; y coordinate of scroll text
 
-\\ Loading state vars
-.load_x					SKIP 1		; animated pixel x
-.load_y					SKIP 1		; animated pixel y
-
 \\ App state vars
 .file_no				SKIP 1		; index into our file table
 .menu_old_file			SKIP 1
@@ -248,17 +269,41 @@ GUARD &9F
 .meta_timer				SKIP 1		; countdown timer before updating meta strings
 .meta_idx				SKIP 1		; index into our meta strings
 .meta_poll_count		SKIP 1		; count polls to update clock
+.meta_clock_mins		SKIP 1
+.meta_clock_secs		SKIP 1
 
 \\ Playback timer vars
 .playtime_interval		SKIP 2		; number of audio frames before playtime bar advances by 1 pixel
 .playtime_counter		SKIP 2
 .playtime_index			SKIP 1		; current X offset of playtime bar (0-47)
 
+
+\ ******************************************************************
+\ *	Space hijacked from OS for runtime buffers not preinitialised
+\ ******************************************************************
+
+ORG &900							; soft-key storage
+.player_song_title_len	SKIP 1
+.player_song_title		SKIP PLAYER_string_max
+.player_song_author_len	SKIP 1
+.player_song_author		SKIP PLAYER_string_max
+
+; -------------------------------------------------------------------
+; this 156 byte table area may be relocated. It may also be clobbered
+; by other data between decrunches.
+; -------------------------------------------------------------------
+
+.decrunch_table
+.tabl_bi  SKIP 156
+tabl_lo = decrunch_table + 52
+tabl_hi = decrunch_table + 104
+
+
 \ ******************************************************************
 \ *	Start address to be saved
 \ ******************************************************************
 
-ORG &1900	      					; code origin - assume standard BBC Micro
+ORG CODE_ORIGIN						; code origin - assume standard BBC Micro
 GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 
 .start
@@ -276,21 +321,20 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 {
 \\ ***** System initialise ***** \\
 
+	\\ *FX 200,3 - clear memory on break as we use OS memory areas and can cause nasty effects
+	LDA #200
+	LDX #3
+	JSR osbyte			
+
 	\\ Set MODE 7
 	LDA #22: JSR oswrch
 	LDA #7: JSR oswrch
 
-	\\ Must be a simpler way to turn off cursor than this!!
-	LDA #23: JSR oswrch
-	LDA #1: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
-	LDA #0: JSR oswrch
+	\\ Turn off cursor by directly poking crtc
+	SEI
+	LDA #10: STA &FE00
+	LDA #32: STA &FE01
+	CLI
 
 	\\ Debounce
 	LDA #&FF
@@ -486,7 +530,7 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 		\\ Handle down
 		\\ Increment file_no up to MAX
 		LDA file_no
-		IF ENABLE_EXIT
+		IF COMPILE_OPTION_EXIT
 		CMP #NUM_vgm_files
 		ELSE
 		CMP #NUM_vgm_files - 1
@@ -625,7 +669,7 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	JMP next
 
 	.positive
-	IF ENABLE_EXIT
+	IF COMPILE_OPTION_EXIT
 	CPX #NUM_vgm_files+1			; include quit option
 	ELSE
 	CPX #NUM_vgm_files				; don't include quit option
@@ -633,11 +677,26 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	BCS clamp
 	
 	\\ Write entry from loading_table
-	TXA:ASL A:TAX
+	LDA #0:STA write_loop+2
 
-	LDA menu_table,X
+	TXA
+	ASL A
+	ROL write_loop+2
+	ASL A
+	ROL write_loop+2
+	ASL A
+	ROL write_loop+2
+	ASL A
+	ROL write_loop+2
+	ASL A
+	ROL write_loop+2				; 16-bit multiply by 32
+
+	; carry is zero
+	ADC #LO(menu_entries)
 	STA write_loop+1
-	LDA menu_table+1,X
+
+	LDA #HI(menu_entries)
+	ADC write_loop+2
 	STA write_loop+2
 
 	\\ Store Y
@@ -646,7 +705,7 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	LDX #0
 	LDY #MENU_entry_xpos
 	.write_loop
-	LDA menu_entry_1,X
+	LDA menu_entries,X
 	STA (writeptr),Y
 	INY
 	INX
@@ -727,7 +786,7 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	BNE loop
 	INC loop + 2						; increment read address hi byte
 	INC loop + 5						; increment write address hi byte
-	BPL loop							; until >= &8000
+	BPL loop							; until >= &8000			; this is actually overcopying the data as we only have 1000 bytes...
 
 	\\ Initialise our effects
 	JSR init_fx
@@ -872,12 +931,14 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 .load_file_from_table			; flle_no = index into our table
 {
 	LDA file_no
-	ASL A:TAX
+	ASL A:ASL A: ASL A			; file_no * 8
 
 	\\ Set osfile param block
-	LDA loading_table,X
+	CLC
+	ADC #LO(vgm_filenames)
 	STA osfile_params + 0
-	LDA loading_table+1,X
+	LDA #HI(vgm_filenames)
+	ADC #0
 	STA osfile_params + 1
 
 	LDA #LO(VGM_stream_data)
@@ -894,7 +955,7 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	LDA #&FF
 	JSR osfile
 
-	\\ Error?
+	\\ Error?					; turns out DFS doesn't return error from osfile A=&FF..!
 	LDA #0						; should return whether error occurred
 	.return
 	RTS
@@ -914,30 +975,6 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 \\ ***** Loading FX ***** \\
 
 \\ Must be cheap otherwise will callback will re-enter!
-
-	\\ Remove old pixel
-	LDX load_x
-	LDY load_y
-	JSR teletexel_erase
-
-	\\ Update pixel pos - just move left to right, top to bottom
-	LDX load_x
-	LDY load_y
-	INX:INX
-	CPX #MODE7_texel_width
-	BCC no_wrapx
-	INY:INY
-	CPY #MODE7_texel_height
-	BCC no_wrapy
-	LDY #0
-	.no_wrapy
-	STY load_y
-	LDX #0
-	.no_wrapx
-	STX load_x
-	
-	\\ Draw new pixel
-	JSR teletexel_plot
 
 	\\ Poll scroll
 	JSR poll_scr
@@ -1010,83 +1047,6 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 	.return
 	RTS	
 }
-
-MACRO TELETEXEL_CALC_WRITEPTR_AND_MASK				; preserves X destroys A & Y
-{
-	\\ Turn texel y into address of row
-	LDA mode7_texel_y_to_row_addr_LO,Y				; 4c
-	STA writeptr									; 3c
-	LDA mode7_texel_y_to_row_addr_HI,Y				; 4c
-	STA writeptr+1									; 3c
-
-	\\ Add x character offset
-	TXA												; 2c
-	LSR A											; 2c
-	BCS odd											; 3c
-
-	\\ Even
-	.even
-	\\ We know carry is clear
-	ADC writeptr									; 3c
-	STA writeptr									; 3c
-	BCC no_carry_even								; 3c
-	INC writeptr+1									; 5c
-	.no_carry_even
-	LDA mode7_texel_lookup_x_even,Y					; 4c
-	JMP plot_texel									; 3c
-
-	\\ Odd
-	.odd
-	CLC												; 2c
-	ADC writeptr									; 3c
-	STA writeptr									; 3c
-	BCC no_carry_odd								; 3c
-	INC writeptr+1									; 5c
-	.no_carry_odd
-	LDA mode7_texel_lookup_x_odd,Y					; 4c
-
-	.plot_texel
-}													; odd = 41c even = 42c  (not including EOR & STA)
-ENDMACRO
-
-.teletexel_plot_eor									; at X, Y
-{
-	TELETEXEL_CALC_WRITEPTR_AND_MASK
-
-	LDY #0											; 2c - not needed on MASTER
-	EOR (writeptr),Y								; 6c
-	STA (writeptr),Y								; 6c
-
-	.return
-	RTS												
-}													; total = 42+14 = 56c (not including RTS)
-
-.teletexel_plot										; at X, Y
-{
-	TELETEXEL_CALC_WRITEPTR_AND_MASK
-
-	LDY #0											; 2c
-	ORA (writeptr),Y								; 6c
-	STA (writeptr),Y								; 6c
-
-	.return
-	RTS
-}	
-
-.teletexel_erase									; at X, Y
-{
-	TELETEXEL_CALC_WRITEPTR_AND_MASK
-
-	EOR #&FF										; flip the bits
-	STA tmp_erase
-	LDY #0											; 2c
-	LDA (writeptr),Y								; 6c
-	AND tmp_erase
-	STA (writeptr),Y								; 6c
-
-	.return
-	RTS
-}	
 
 
 \ ******************************************************************
@@ -2770,58 +2730,60 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ; end of decruncher
 ; -------------------------------------------------------------------
 
-; -------------------------------------------------------------------
-; this 156 byte table area may be relocated. It may also be clobbered
-; by other data between decrunches.
-; -------------------------------------------------------------------
-.decrunch_table
-.tabl_bi  SKIP 156
-tabl_lo = decrunch_table + 52
-tabl_hi = decrunch_table + 104
+.code_end
 
-; -------------------------------------------------------------------
-; end of decruncher
-; -------------------------------------------------------------------
 
 \ ******************************************************************
 \ *	Stored data
 \ ******************************************************************
 
-.loading_table			; update NUM_vgm_files if this changes
-EQUB LO(vgm_filename_1): EQUB HI(vgm_filename_1)
-EQUB LO(vgm_filename_2): EQUB HI(vgm_filename_2)
-EQUB LO(vgm_filename_3): EQUB HI(vgm_filename_3)
-EQUB LO(vgm_filename_4): EQUB HI(vgm_filename_4)
-EQUB LO(vgm_filename_5): EQUB HI(vgm_filename_5)
-EQUB LO(vgm_filename_6): EQUB HI(vgm_filename_6)
+.data_start
+.menu_data_start
 
-.vgm_filename_1			EQUS "master", 13
-.vgm_filename_2			EQUS "except", 13
-.vgm_filename_3			EQUS "fluid", 13
-.vgm_filename_4			EQUS "ice", 13
-.vgm_filename_5			EQUS "sonic", 13
-.vgm_filename_6			EQUS "pharoah", 13
+\\ No longer require loading_table but each entry must be exactly 8 bytes
+\\ Does not have to be aligned but entries have to be fixed size
+\\ This isn't actually any smaller than using pointer tables but fewer things to type I suppose :)
 
-.menu_table
-EQUB LO(menu_entry_1): EQUB HI(menu_entry_1)
-EQUB LO(menu_entry_2): EQUB HI(menu_entry_2)
-EQUB LO(menu_entry_3): EQUB HI(menu_entry_3)
-EQUB LO(menu_entry_4): EQUB HI(menu_entry_4)
-EQUB LO(menu_entry_5): EQUB HI(menu_entry_5)
-EQUB LO(menu_entry_6): EQUB HI(menu_entry_6)
-EQUB LO(menu_entry_exit): EQUB HI(menu_entry_exit)
+.vgm_filenames
+EQUS "master", 13,0
+EQUS "except", 13,0
+EQUS "fluid", 13,0,0
+EQUS "ice", 13,0,0,0,0
+EQUS "sonic", 13,0,0
+EQUS "pharoah", 13
+EQUS "magic", 13,0,0
+EQUS "sorry", 13,0,0
+EQUS "chaos", 13,0,0
+EQUS "envard", 13,0
+EQUS "insur", 13,0,0
+EQUS "mission", 13
 
-.menu_entry_1			EQUS "1. Master.vgm                     "
-.menu_entry_2			EQUS "2. Except.vgm                     "
-.menu_entry_3			EQUS "3. Fluid.vgm                      "
-.menu_entry_4			EQUS "4. Ice.vgm                        "
-.menu_entry_5			EQUS "5. Sonic.vgm                      "
-.menu_entry_6			EQUS "6. Pharoah.vgm                    "
-.menu_entry_exit		EQUS "Exit                              "
+\\ No longer require pointer table but each entry must be exactly 32 bytes
+\\ Does not have to be aligned but entries have to be fixed size
+\\ Code to multiple by 32 probably takes up as much space as the previous pointer tables!
+
+.menu_entries
+EQUS " 1. Master Tracker              "
+EQUS " 2. Exception                   "
+EQUS " 3. Fluid Dynamics              "
+EQUS " 4. Ice Fields                  "
+EQUS " 5. Sonic Enters a Dance Club   "
+EQUS " 6. Frozen Dancehall o/t Pharoah"
+EQUS " 7. Magic beans                 "
+EQUS " 8. LOL I am late Sorry         "
+EQUS " 9. Collision Chaos             "
+EQUS "10. En vard fyra javal          "
+EQUS "11. Insurmountable              "
+EQUS "12. Mission 76496               "
+IF COMPILE_OPTION_EXIT
+EQUS "Exit                            "
+ENDIF
 
 \ ******************************************************************
 \ *	Look up tables
 \ ******************************************************************
+
+.lookup_tables_start
 
 \\ Start address of each row in MODE 7 - wasteful but helpful
 .mode7_row_addr_LO
@@ -2832,34 +2794,6 @@ NEXT
 .mode7_row_addr_HI
 FOR n, 0, MODE7_char_height-1, 1
 EQUB HI(MODE7_base_addr + n * MODE7_char_width)
-NEXT
-
-\\ Lookup byte address for a given teletexel y coordinate - wasteful but fast
-.mode7_texel_y_to_row_addr_LO
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB LO(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
-NEXT
-
-.mode7_texel_y_to_row_addr_HI
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB HI(MODE7_base_addr + ((n DIV 3) * MODE7_char_width) + 2)
-NEXT
-
-\\ Lookup bit mask for a given teletexel y coordinate - wasteful but fast
-.mode7_texel_lookup_x_even
-FOR n, 0, MODE7_texel_height-1, 1
-	EQUB 1 << ((n % 3) * 2)
-NEXT
-
-.mode7_texel_lookup_x_odd
-FOR n, 0, MODE7_texel_height-1, 1
-	IF (n % 3) = 0
-		EQUB 2
-	ELIF (n % 3) = 1
-		EQUB 8
-	ELSE
-		EQUB 64			; stupid teletext spec
-	ENDIF
 NEXT
 
 \\ 16 Arrangements of 5 teletext character bytes to render a vertical equalizer bar
@@ -2888,17 +2822,19 @@ EQUB 160+29, 160+78	; 160+12 for 'empty' middle line dash
 .num_to_bit				; look up bit N
 EQUB &01, &02, &04, &08, &10, &20, &40, &80
 
+.hex_to_ascii			; for volume print
+EQUS "0123456789abcdef"
+
 .noise_note_0 EQUS "Lo"
 .noise_note_1 EQUS "Md"
 .noise_note_2 EQUS "Hi"
 .noise_note_3 EQUS "T1"
 
-.hex_to_ascii			; for volume print
-EQUS "0123456789abcdef"
+.note_tables_start
 
 \\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
 \\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
-ALIGN &100
+;ALIGN &100		; doesn't need to be page aligned
 .note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
 ;note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
 \\ Quirk of MODE 7: ASCII 35='#' but in gfx mode 35+128='£' so need to use ASCII 95='_' so in gfx mode 95+128='#'
@@ -2982,7 +2918,9 @@ MAPCHAR '.', 197
 
 MAPCHAR ' ', 241
 
+
 \\ Scrolltext messages stored as font glyph byte offsets
+.scrolltext_start
 
 .demo_message
 EQUS "BeebTracker scrolltext in the right place and now scrolled one pixel per frame. Looks pretty smooth! 0123456789?!. ", 0
@@ -2992,10 +2930,11 @@ EQUS "Loading... ", 0
 
 \\ ** ANY EQUS LINES AFTER THIS POINT WILL STILL CONTAIN REMAPPED CHARACTERS ** \\
 
-
 \ ******************************************************************
 \ *	MODE 7 screen data
 \ ******************************************************************
+
+.mode7_data_start
 
 .mode7_screen_data
 INCBIN "screen3.mode7"
@@ -3003,14 +2942,16 @@ INCBIN "screen3.mode7"
 MENU_original_src_addr = mode7_screen_data + MENU_overlay_ypos * MODE7_char_width
 
 .mode7_font_data				; we use 16/25 lines of this screen
-INCBIN "font_5x5_shifted.mode7"
+INCBIN "font_5x5_shifted_trimmed.mode7.bin"
 
 mode7_font_data_shifted = mode7_font_data + 8 * 40
 
 .mode7_menu_data
-INCBIN "menu_overlay.mode7"		; ditto, we only use ~8/25 lines of this screen
+INCBIN "menu_overlay_trimmed.mode7.bin"		; ditto, we only use ~8/25 lines of this screen
 
-MENU_overlay_src_addr = mode7_menu_data + MENU_overlay_ypos * MODE7_char_width
+MENU_overlay_src_addr = mode7_menu_data		; stripped this off (+ MENU_overlay_ypos * MODE7_char_width)
+
+.mode7_data_end
 
 \ ******************************************************************
 \ *	End address to be saved
@@ -3018,38 +2959,14 @@ MENU_overlay_src_addr = mode7_menu_data + MENU_overlay_ypos * MODE7_char_width
 
 .end
 
-
 \ ******************************************************************
 \ *	Space reserved for runtime buffers not preinitialised
 \ ******************************************************************
 
-\\ Frequency array for vu-meter effect, plus beat bars for 4 channels
-\\ These two must be contiguous in memory
-.freq_array				SKIP FX_num_freqs
-.chan_array				SKIP FX_num_channels
-.player_reg_vals		SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
-
-.meta_clock_mins		SKIP 1
-.meta_clock_secs		SKIP 1
-
-\\ Copied out of the RAW VGM header
-.player_packet_count	SKIP 2		; number of packets
-.player_packet_offset	SKIP 1		; offset from start of file to beginning of packet data
-.player_duration_mins	SKIP 1		; song duration (mins)
-.player_duration_secs	SKIP 1		; song duration (secs)
-
-.player_song_title_len	SKIP 1
-.player_song_title		SKIP PLAYER_string_max
-.player_song_author_len	SKIP 1
-.player_song_author		SKIP PLAYER_string_max
-
-\\ Params block for osfile command
-.osfile_params			SKIP 18
-
 \\ Exomiser unpack buffer (must be page aligned)
-ALIGN &100
-.EXO_buffer_start		SKIP EXO_buffer_len
-.EXO_buffer_end
+\\ Now moved this to the language workspace at &0400 - &0800
+EXO_buffer_start = &400
+EXO_buffer_end = EXO_buffer_start + EXO_buffer_len
 
 
 \ ******************************************************************
@@ -3058,10 +2975,32 @@ ALIGN &100
 \ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
 \ ******************************************************************
 
-ALIGN &100
+;ALIGN &100		; not sure there's any reason that this needs to be page aligned!
 .VGM_stream_data
 \\ Now loaded at run-time so don't know end of data!
 .VGM_end_of_data
+
+
+\ ******************************************************************
+\ *	Print out code & data metrics
+\ ******************************************************************
+
+PRINT "------------------------------------------------------------"
+PRINT "Code origin = ", ~CODE_ORIGIN
+PRINT "Code size =", code_end-start
+PRINT "Data size =", end-data_start
+PRINT " menu data size =",lookup_tables_start-menu_data_start
+PRINT " lookup tables size =",note_tables_start-lookup_tables_start
+PRINT " note tables size =",scrolltext_start-note_tables_start
+PRINT " scrolltext size =",mode7_data_start-scrolltext_start
+PRINT " MODE 7 screen size =", mode7_data_end-mode7_data_start
+PRINT "Run-time vars (above origin) =", VGM_stream_data-end
+PRINT "------------------------------------------------------------"
+PRINT "Total size (disk) =", end-start
+PRINT "Total size (code + data + vars above origin) =", VGM_stream_data-start
+PRINT "Available memory (above origin) =", &7C00 - CODE_ORIGIN
+PRINT "Max song size =", &7C00 - VGM_stream_data
+PRINT "------------------------------------------------------------"
 
 
 \ ******************************************************************
@@ -3075,6 +3014,12 @@ PUTFILE "BotB 7383 exception.raw.exo", "except", 0
 PUTFILE "BotB 7832 MasterTracker.raw.exo", "master", 0
 PUTFILE "BotB 4406 sonic_enters_a_dance_club.raw.exo", "sonic", 0
 PUTFILE "BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "pharoah", 0
+PUTFILE "ne7-magic_beansmaster_system_psg.raw.exo", "magic", 0
+PUTFILE "BotB 7639 lol i am late sorry.raw.exo", "sorry", 0
+PUTFILE "Chris Kelly - SMS Power 15th Anniversary Competitions - Collision Chaos.raw.exo", "chaos", 0
+PUTFILE "en vard fyra javel.raw.exo", "envard", 0
+PUTFILE "insurmountable.raw.exo", "insur", 0
+PUTFILE "MISSION76496.raw.exo", "mission", 0
 
 IF _DEBUG			; only needed for debug purposes
 PUTFILE "screen3.mode7", "screen", &7C00
