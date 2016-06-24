@@ -3008,18 +3008,18 @@ PRINT "------------------------------------------------------------"
 \ ******************************************************************
 
 SAVE "BeebTrk", start, end
-PUTFILE "BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "fluid", 0
-PUTFILE "ice.raw.exo", "ice", 0
-PUTFILE "BotB 7383 exception.raw.exo", "except", 0
-PUTFILE "BotB 7832 MasterTracker.raw.exo", "master", 0
-PUTFILE "BotB 4406 sonic_enters_a_dance_club.raw.exo", "sonic", 0
-PUTFILE "BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "pharoah", 0
-PUTFILE "ne7-magic_beansmaster_system_psg.raw.exo", "magic", 0
-PUTFILE "BotB 7639 lol i am late sorry.raw.exo", "sorry", 0
-PUTFILE "Chris Kelly - SMS Power 15th Anniversary Competitions - Collision Chaos.raw.exo", "chaos", 0
-PUTFILE "en vard fyra javel.raw.exo", "envard", 0
-PUTFILE "insurmountable.raw.exo", "insur", 0
-PUTFILE "MISSION76496.raw.exo", "mission", 0
+PUTFILE "volume1/BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "fluid", 0
+PUTFILE "volume1/ice.raw.exo", "ice", 0
+PUTFILE "volume1/BotB 7383 exception.raw.exo", "except", 0
+PUTFILE "volume1/BotB 7832 MasterTracker.raw.exo", "master", 0
+PUTFILE "volume1/BotB 4406 sonic_enters_a_dance_club.raw.exo", "sonic", 0
+PUTFILE "volume1/BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "pharoah", 0
+PUTFILE "volume1/ne7-magic_beansmaster_system_psg.raw.exo", "magic", 0
+PUTFILE "volume1/BotB 7639 lol i am late sorry.raw.exo", "sorry", 0
+PUTFILE "volume1/Chris Kelly - SMS Power 15th Anniversary Competitions - Collision Chaos.raw.exo", "chaos", 0
+PUTFILE "volume1/en vard fyra javel.raw.exo", "envard", 0
+PUTFILE "volume1/insurmountable.raw.exo", "insur", 0
+PUTFILE "volume1/MISSION76496.raw.exo", "mission", 0
 
 IF _DEBUG			; only needed for debug purposes
 PUTFILE "screen3.mode7", "screen", &7C00
