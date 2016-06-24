@@ -6,73 +6,7 @@
 \ ******************************************************************
 
 
-\ ******************************************************************
-\ *	Define OS entries (could be INCLUDE bbc_os.h)
-\ ******************************************************************
-
-osfile = &FFDD
-oswrch = &FFEE
-osasci = &FFE3
-osbyte = &FFF4
-osword = &FFF1
-EVENTV = &0220
-
-\\ Internal Key Number not INKEY!
-IKN_esc = 112
-IKN_up = 57
-IKN_down = 41
-IKN_return = 73
-IKN_q = 16
-IKN_a = 65
-
-\\ Opcodes
-SEI_OP = $78
-CLI_OP = $58
-NOP_OP = $ea
-
-\\ SN Register Values
-SN_REG_MASK = &70
-SN_REG_TONE3_FREQ = 0
-SN_REG_TONE3_VOL = 1
-SN_REG_TONE2_FREQ = 2
-SN_REG_TONE2_VOL = 3
-SN_REG_TONE1_FREQ = 4
-SN_REG_TONE1_VOL = 5
-SN_REG_NOISE_CTRL = 6
-SN_REG_NOISE_VOL = 7
-SN_REG_MAX = 8
-
-\\ SN Register Bit-field
-SN_BIT_TONE3_FREQ = &01
-SN_BIT_TONE3_VOL = &02
-SN_BIT_TONE2_FREQ = &04
-SN_BIT_TONE2_VOL = &08
-SN_BIT_TONE1_FREQ = &10
-SN_BIT_TONE1_VOL = &20
-SN_BIT_NOISE_CTRL = &40
-SN_BIT_NOISE_VOL = &80
-
-\\ SN Frequency Constants
-SN_FREQ_BYTE_MASK = &80
-SN_FREQ_FIRST_BYTE_MASK = &0F
-SN_FREQ_SECOND_BYTE_MASK = &3F
-
-\\ SN Volume Constants
-SN_VOL_MASK = &0F
-SN_VOL_MAX = &0F
-
-\\ Noise Freqency Vaues
-SN_NF_MASK = &03
-SN_NF_LOW = 0
-SN_NF_MED = 1
-SN_NF_HIGH = 2
-SN_NF_TONE1 = 3
-
-\\ Noise Frequency Type
-SN_FB_MASK = &04
-SN_FB_PERIODIC = 0
-SN_FB_WHITENOISE = &04
-
+INCLUDE "bbc.h.6502"
 
 \ ******************************************************************
 \ *	Define compilation flags
@@ -84,30 +18,11 @@ _DEBUG = TRUE						; include extra stuff for debugging
 COMPILE_OPTION_EXIT = FALSE			; enable "Exit" in selection menu
 
 
-\ ******************************************************************
-\ *	Define global macros
-\ ******************************************************************
-
 
 \ ******************************************************************
 \ *	Define global constants
 \ ******************************************************************
 
-\\ EXOMISER (compression library)
-EXO_buffer_len = 1024			; this is now packed in to language workspace at &0400
-\\ If you want to make this bigger than 1024 then need to find somewhere else to put it!!
-
-\\ MODE 7
-MODE7_base_addr = &7C00
-MODE7_char_width = 40
-MODE7_char_height = 25
-MODE7_texel_width = (MODE7_char_width - 2) * 2
-MODE7_texel_height = MODE7_char_height * 3
-
-MODE7_alpha_black = 128
-MODE7_graphic_black = 144
-MODE7_contiguous = 153
-MODE7_separated = 154
 
 \\ Player
 PLAYER_string_max = 42			; size of our meta data strings (title and author)
@@ -208,21 +123,10 @@ GUARD &70
 \\ Params block for osfile command
 .osfile_params			SKIP 18
 
-\\ EXOMISER (compression library)
-EXO_zp_src_hi = $70
-EXO_zp_src_lo = EXO_zp_src_hi + 1
-EXO_zp_src_bi = EXO_zp_src_hi + 2
-EXO_zp_bitbuf = EXO_zp_src_hi + 3
 
-EXO_zp_len_lo  = $74
-EXO_zp_len_hi  = EXO_zp_len_lo + 1
+INCLUDE "exomiser.h.6502"
 
-EXO_zp_bits_lo = $76
-EXO_zp_bits_hi = EXO_zp_bits_lo + 1
 
-EXO_zp_dest_hi = $78
-EXO_zp_dest_lo = EXO_zp_dest_hi + 1	; dest addr lo
-EXO_zp_dest_bi = EXO_zp_dest_hi + 2	; dest addr hi
 
 \\ Our own app variables
 ORG &7B
@@ -288,15 +192,7 @@ ORG &900							; soft-key storage
 .player_song_author_len	SKIP 1
 .player_song_author		SKIP PLAYER_string_max
 
-; -------------------------------------------------------------------
-; this 156 byte table area may be relocated. It may also be clobbered
-; by other data between decrunches.
-; -------------------------------------------------------------------
 
-.decrunch_table
-.tabl_bi  SKIP 156
-tabl_lo = decrunch_table + 52
-tabl_hi = decrunch_table + 104
 
 
 \ ******************************************************************
@@ -312,6 +208,9 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 \ ******************************************************************
 \ *	Code entry
 \ ******************************************************************
+
+INCLUDE "exomiser.s.6502"
+
 
 \ ******************************************************************
 \ *	Main loop including high-level state machine
@@ -2455,280 +2354,8 @@ IF _DEBUG
 ENDIF
 
 
-\ ******************************************************************
-\ *	Exomiser (decompression library)
-\ ******************************************************************
 
-; -------------------------------------------------------------------
-; for this get_crunched_byte routine to work the crunched data has to be
-; crunced using the -m <buffersize> and possibly the -l flags. Any other
-; flag will just mess things up.
-.get_crunched_byte
-{
-	INC _byte_lo
-	bne _byte_skip_hi
-	INC _byte_hi			; forward decrunch
-._byte_skip_hi:
 
-._byte
-	lda VGM_stream_data-1	; **SELF-MODIFIED CODE**
-_byte_lo = _byte + 1
-_byte_hi = _byte + 2
-	rts						; decrunch_file is called.
-}
-; VGM_end_of_data needs to point to the address just after the address
-; of the last byte of crunched data.
-; -------------------------------------------------------------------
-
-EXO_crunch_byte_lo = get_crunched_byte + 9
-EXO_crunch_byte_hi = get_crunched_byte + 10
-
-; -------------------------------------------------------------------
-; jsr this label to init the decruncher, it will init used zeropage
-; zero page locations and the decrunch tables
-; no constraints on register content, however the
-; decimal flag has to be #0 (it almost always is, otherwise do a cld)
-; -------------------------------------------------------------------
-.init_decruncher				; pass in address of (crunched data-1) in X,Y
-{
-	STX EXO_crunch_byte_lo
-	STY EXO_crunch_byte_hi
-
-	jsr get_crunched_byte
-	sta EXO_zp_bitbuf
-
-	ldx #0
-	stx EXO_zp_dest_lo
-	stx EXO_zp_dest_hi
-	stx EXO_zp_len_lo
-	stx EXO_zp_len_hi
-	ldy #0
-; -------------------------------------------------------------------
-; calculate tables (49 bytes)
-; x and y must be #0 when entering
-;
-._init_nextone
-	inx
-	tya
-	and #$0f
-	beq _init_shortcut		; starta på ny sekvens
-
-	txa			; this clears reg a
-	lsr a			; and sets the carry flag
-	ldx EXO_zp_bits_lo
-._init_rolle
-	rol a
-	rol EXO_zp_bits_hi
-	dex
-	bpl _init_rolle		; c = 0 after this (rol EXO_zp_bits_hi)
-
-	adc tabl_lo-1,y
-	tax
-
-	lda EXO_zp_bits_hi
-	adc tabl_hi-1,y
-._init_shortcut
-	sta tabl_hi,y
-	txa
-	sta tabl_lo,y
-
-	ldx #4
-	jsr _bit_get_bits		; clears x-reg.
-	sta tabl_bi,y
-	iny
-	cpy #52
-	bne _init_nextone
-}
-\\ Fall through!	
-
-._do_exit
-	rts
-
-; -------------------------------------------------------------------
-; decrunch one byte
-;
-.get_decrunched_byte
-{
-	ldy EXO_zp_len_lo
-	bne _do_sequence
-	ldx EXO_zp_len_hi
-	bne _do_sequence2
-
-	jsr _bit_get_bit1
-	beq _get_sequence
-; -------------------------------------------------------------------
-; literal handling (13 bytes)
-;
-	jsr get_crunched_byte
-	bcc _do_literal
-; -------------------------------------------------------------------
-; count zero bits + 1 to get length table index (10 bytes)
-; y = x = 0 when entering
-;
-._get_sequence
-._seq_next1
-	iny
-	jsr _bit_get_bit1
-	beq _seq_next1
-	cpy #$11
-	bcs _do_exit
-; -------------------------------------------------------------------
-; calulate length of sequence (zp_len) (17 bytes)
-;
-	ldx tabl_bi - 1,y
-	jsr _bit_get_bits
-	adc tabl_lo - 1,y
-	sta EXO_zp_len_lo
-	lda EXO_zp_bits_hi
-	adc tabl_hi - 1,y
-	sta EXO_zp_len_hi
-; -------------------------------------------------------------------
-; here we decide what offset table to use (20 bytes)
-; x is 0 here
-;
-	bne _seq_nots123
-	ldy EXO_zp_len_lo
-	cpy #$04
-	bcc _seq_size123
-._seq_nots123
-	ldy #$03
-._seq_size123
-	ldx tabl_bit - 1,y
-	jsr _bit_get_bits
-	adc tabl_off - 1,y
-	tay
-; -------------------------------------------------------------------
-; calulate absolute offset (zp_src) (27 bytes)
-;
-	ldx tabl_bi,y
-	jsr _bit_get_bits;
-	adc tabl_lo,y
-	bcc _seq_skipcarry
-	inc EXO_zp_bits_hi
-	clc
-._seq_skipcarry
-	adc EXO_zp_dest_lo
-	sta EXO_zp_src_lo
-	lda EXO_zp_bits_hi
-	adc tabl_hi,y
-	adc EXO_zp_dest_hi
-; -------------------------------------------------------------------
-	cmp #HI(EXO_buffer_len)
-	bcc _seq_offset_ok
-	sbc #HI(EXO_buffer_len)
-	clc
-; -------------------------------------------------------------------
-._seq_offset_ok
-	sta EXO_zp_src_hi
-	adc #HI(EXO_buffer_start)
-	sta EXO_zp_src_bi
-._do_sequence
-	ldy #0
-._do_sequence2
-	ldx EXO_zp_len_lo
-	bne _seq_len_dec_lo
-	dec EXO_zp_len_hi
-._seq_len_dec_lo
-	dec EXO_zp_len_lo
-; -------------------------------------------------------------------
-	ldx EXO_zp_src_lo
-	bne _seq_src_dec_lo
-	ldx EXO_zp_src_hi
-	bne _seq_src_dec_hi
-; ------- handle buffer wrap problematics here ----------------------
-	ldx #HI(EXO_buffer_len)
-	stx EXO_zp_src_hi
-	ldx #HI(EXO_buffer_end)
-	stx EXO_zp_src_bi
-; -------------------------------------------------------------------
-._seq_src_dec_hi
-	dec EXO_zp_src_hi
-	dec EXO_zp_src_bi
-._seq_src_dec_lo
-	dec EXO_zp_src_lo
-; -------------------------------------------------------------------
-	lda (EXO_zp_src_lo),y
-; -------------------------------------------------------------------
-._do_literal
-	ldx EXO_zp_dest_lo
-	bne _seq_dest_dec_lo
-	ldx EXO_zp_dest_hi
-	bne _seq_dest_dec_hi
-; ------- handle buffer wrap problematics here ----------------------
-	ldx #HI(EXO_buffer_len)
-	stx EXO_zp_dest_hi
-	ldx #HI(EXO_buffer_end)
-	stx EXO_zp_dest_bi
-; -------------------------------------------------------------------
-._seq_dest_dec_hi
-	dec EXO_zp_dest_hi
-	dec EXO_zp_dest_bi
-._seq_dest_dec_lo
-	dec EXO_zp_dest_lo
-; -------------------------------------------------------------------
-	sta (EXO_zp_dest_lo),y
-	clc
-	rts
-}
-
-; -------------------------------------------------------------------
-; two small static tables (6 bytes)
-;
-.tabl_bit
-{
-	EQUB 2,4,4
-}
-.tabl_off
-{
-	EQUB 48,32,16
-}
-
-; -------------------------------------------------------------------
-; get x + 1 bits (1 byte)
-;
-._bit_get_bit1
-	inx
-; -------------------------------------------------------------------
-; get bits (31 bytes)
-;
-; args:
-;   x = number of bits to get
-; returns:
-;   a = #bits_lo
-;   x = #0
-;   c = 0
-;   EXO_zp_bits_lo = #bits_lo
-;   EXO_zp_bits_hi = #bits_hi
-; notes:
-;   y is untouched
-;   other status bits are set to (a == #0)
-; -------------------------------------------------------------------
-._bit_get_bits
-{
-	lda #$00
-	sta EXO_zp_bits_lo
-	sta EXO_zp_bits_hi
-	cpx #$01
-	bcc _bit_bits_done
-	lda EXO_zp_bitbuf
-._bit_bits_next
-	lsr a
-	bne _bit_ok
-	jsr get_crunched_byte
-	ror a
-._bit_ok
-	rol EXO_zp_bits_lo
-	rol EXO_zp_bits_hi
-	dex
-	bne _bit_bits_next
-	sta EXO_zp_bitbuf
-	lda EXO_zp_bits_lo
-._bit_bits_done
-	rts
-}
-; -------------------------------------------------------------------
-; end of decruncher
-; -------------------------------------------------------------------
 
 .code_end
 
@@ -2959,14 +2586,6 @@ MENU_overlay_src_addr = mode7_menu_data		; stripped this off (+ MENU_overlay_ypo
 
 .end
 
-\ ******************************************************************
-\ *	Space reserved for runtime buffers not preinitialised
-\ ******************************************************************
-
-\\ Exomiser unpack buffer (must be page aligned)
-\\ Now moved this to the language workspace at &0400 - &0800
-EXO_buffer_start = &400
-EXO_buffer_end = EXO_buffer_start + EXO_buffer_len
 
 
 \ ******************************************************************
@@ -3007,7 +2626,7 @@ PRINT "------------------------------------------------------------"
 \ *	Save the code
 \ ******************************************************************
 
-SAVE "BeebTrk", start, end
+SAVE "BeebTrk", start, end, main
 PUTFILE "volume1/BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "fluid", 0
 PUTFILE "volume1/ice.raw.exo", "ice", 0
 PUTFILE "volume1/BotB 7383 exception.raw.exo", "except", 0
