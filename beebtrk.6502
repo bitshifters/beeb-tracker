@@ -6,7 +6,7 @@
 \ ******************************************************************
 
 \\ Common global defines
-INCLUDE "bbc.h.6502"
+INCLUDE "lib/bbc.h.6502"
 
 \ ******************************************************************
 \ *	Define compilation flags
@@ -44,9 +44,9 @@ GUARD &9F							; user ZP + econet ZP
 
 
 \\ Any includes here can declare ZP vars from the pool using SKIP
-INCLUDE "exomiser.h.6502"
-INCLUDE "vgmplayer.h.6502"
-INCLUDE "beebtracker.h.6502"
+INCLUDE "lib/exomiser.h.6502"
+INCLUDE "lib/vgmplayer.h.6502"
+INCLUDE "lib/beebtracker.h.6502"
 
 
 
@@ -64,9 +64,9 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 \ *	Code entry
 \ ******************************************************************
 
-INCLUDE "exomiser.s.6502"
-INCLUDE "vgmplayer.s.6502"
-INCLUDE "beebtracker.s.6502"
+INCLUDE "lib/exomiser.s.6502"
+INCLUDE "lib/vgmplayer.s.6502"
+INCLUDE "lib/beebtracker.s.6502"
 
 \ ******************************************************************
 \ *	Main loop including high-level state machine
