@@ -258,17 +258,17 @@ EQUS "Loading... ", 0
 .mode7_data_start
 
 .mode7_screen_data
-INCBIN "screen3.mode7"
+INCBIN "data/screen3.mode7"
 
 MENU_original_src_addr = mode7_screen_data + MENU_overlay_ypos * MODE7_char_width
 
 .mode7_font_data				; we use 16/25 lines of this screen
-INCBIN "font_5x5_shifted_trimmed.mode7.bin"
+INCBIN "data/font_5x5_shifted_trimmed.mode7.bin"
 
 mode7_font_data_shifted = mode7_font_data + 8 * 40
 
 .mode7_menu_data
-INCBIN "menu_overlay_trimmed.mode7.bin"		; ditto, we only use ~8/25 lines of this screen
+INCBIN "data/menu_overlay_trimmed.mode7.bin"		; ditto, we only use ~8/25 lines of this screen
 
 MENU_overlay_src_addr = mode7_menu_data		; stripped this off (+ MENU_overlay_ypos * MODE7_char_width)
 
@@ -334,8 +334,8 @@ PUTFILE "volume1/insurmountable.raw.exo", "insur", 0
 PUTFILE "volume1/MISSION76496.raw.exo", "mission", 0
 
 IF _DEBUG			; only needed for debug purposes
-PUTFILE "screen3.mode7", "screen", &7C00
-PUTFILE "font_5x5.mode7", "font", &7C00
-PUTFILE "font_5x5_shifted.mode7", "font2", &7C00
-PUTFILE "menu_overlay.mode7", "menu", &7C00
+PUTFILE "data/screen3.mode7", "screen", &7C00
+PUTFILE "data/font_5x5.mode7", "font", &7C00
+PUTFILE "data/font_5x5_shifted.mode7", "font2", &7C00
+PUTFILE "data/menu_overlay.mode7", "menu", &7C00
 ENDIF
