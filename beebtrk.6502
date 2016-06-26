@@ -241,15 +241,21 @@ D_LOOKUP_SIZE = lookup_tables_end-lookup_tables_start
 D_NOTES_SIZE = note_tables_end-note_tables_start
 D_SCROLLTEXT_SIZE = scrolltext_end-scrolltext_start
 D_SCREENS_SIZE = mode7_data_end-mode7_data_start
+D_EXO_CODE_SIZE = exo_end-exo_start
+D_VGM_PLAYER_CODE_SIZE = vgm_player_end-vgm_player_start
+
 
 PRINT "------------------------------------------------------------"
 PRINT "Code origin = ", ~CODE_ORIGIN
+
 PRINT "Code size =", end-start-D_MENU_SIZE-D_LOOKUP_SIZE-D_NOTES_SIZE-D_SCROLLTEXT_SIZE-D_SCREENS_SIZE
 PRINT " menu data size =",D_MENU_SIZE
 PRINT " lookup tables size =",D_LOOKUP_SIZE
 PRINT " note tables size =",D_NOTES_SIZE
 PRINT " scrolltext size =",D_SCROLLTEXT_SIZE
 PRINT " MODE 7 screen size =", D_SCREENS_SIZE
+PRINT " VGM Player code size = ", D_VGM_PLAYER_CODE_SIZE
+PRINT " EXO code size = ", D_EXO_CODE_SIZE
 PRINT "Run-time vars (above origin) =", VGM_stream_data-end
 PRINT "------------------------------------------------------------"
 PRINT "Total size (disk) =", end-start

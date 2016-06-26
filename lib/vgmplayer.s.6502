@@ -20,6 +20,8 @@ GUARD &0cff
 
 ORG VGMPLAYER_ORG
 
+.vgm_player_start
+
 \ ******************************************************************
 \ *	VGM music player
 \ * Plays a RAW format VGM music stream from an Exomiser compressed data stream
@@ -407,3 +409,8 @@ ENDIF
 	LDA player_data
 	RTS
 }
+
+
+
+.vgm_player_end
+

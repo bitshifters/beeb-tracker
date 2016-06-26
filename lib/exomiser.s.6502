@@ -3,6 +3,7 @@
 \ *	Exomiser (decompression library)
 \ ******************************************************************
 
+.exo_start
 
 ; -------------------------------------------------------------------
 ; Fetch byte from an exomiser compressed data stream
@@ -279,4 +280,5 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ; -------------------------------------------------------------------
 
 
+.exo_end
 
