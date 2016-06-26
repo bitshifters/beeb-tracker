@@ -5,7 +5,7 @@
 \ * Demo team name TBD! :)
 \ ******************************************************************
 
-
+\\ Common global defines
 INCLUDE "bbc.h.6502"
 
 \ ******************************************************************
@@ -24,9 +24,6 @@ COMPILE_OPTION_EXIT = FALSE			; enable "Exit" in selection menu
 \ ******************************************************************
 
 
-\\ Player
-PLAYER_string_max = 42			; size of our meta data strings (title and author)
-PLAYER_sample_rate = 50			; locked to 50Hz
 
 
 \ ******************************************************************
@@ -37,8 +34,6 @@ PLAYER_sample_rate = 50			; locked to 50Hz
 NUM_vgm_files = 12
 
 \\ VU & beat bar FX
-FX_num_freqs = 32				; number of VU bars - can be 16 or 32
-FX_num_channels = 4				; number of beat bars (one per channel)
 
 FX_chr_x = 4
 FX_chr_y = 8
@@ -104,40 +99,19 @@ META_duration_addr = MODE7_base_addr + 6 * MODE7_char_width + 33		; duration dis
 \ *	Define fast (zero page) runtime variables
 \ ******************************************************************
 
+\\ Our own app variables
 ORG &00
-GUARD &70
+GUARD &9F							; user ZP + econet ZP
 
-\\ Frequency array for vu-meter effect, plus beat bars for 4 channels
-\\ These two must be contiguous in memory
-.freq_array				SKIP FX_num_freqs
-.chan_array				SKIP FX_num_channels
-.player_reg_vals		SKIP SN_REG_MAX		; data values passed to each channel during audio playback (4x channels x pitch + volume)
 
-\\ Copied out of the RAW VGM header
-.player_packet_count	SKIP 2		; number of packets
-.player_duration_mins	SKIP 1		; song duration (mins)
-.player_duration_secs	SKIP 1		; song duration (secs)
-
-.player_packet_offset	SKIP 1		; offset from start of file to beginning of packet data
+\\ Any includes here can declare ZP vars from the pool using SKIP
+INCLUDE "exomiser.h.6502"
+INCLUDE "vgmplayer.h.6502"
 
 \\ Params block for osfile command
 .osfile_params			SKIP 18
 
 
-INCLUDE "exomiser.h.6502"
-
-
-
-\\ Our own app variables
-ORG &7B
-GUARD &9F							; user ZP + econet ZP
-
-\\ Player vars
-.player_ended			SKIP 1		; non-zero when player has reached end of tune
-.player_data			SKIP 1		; temporary variable when decoding sound data - must be separate as player running on events
-.player_last_reg		SKIP 1		; last channel (register) refered to by the VGM sound data
-.player_counter			SKIP 1		; increments by 1 every poll (20ms) - used as our tracker line no. & to sync fx with audio update
-.player_reg_bits		SKIP 1		; bits 0 - 7 set if SN register 0 - 7 updated this frame, cleared at start of player poll
 
 \\ Temporary vars
 .tmp_var				; SHARED	; free for any function to use but not preserved across subroutines
@@ -186,11 +160,6 @@ GUARD &9F							; user ZP + econet ZP
 \ *	Space hijacked from OS for runtime buffers not preinitialised
 \ ******************************************************************
 
-ORG &900							; soft-key storage
-.player_song_title_len	SKIP 1
-.player_song_title		SKIP PLAYER_string_max
-.player_song_author_len	SKIP 1
-.player_song_author		SKIP PLAYER_string_max
 
 
 
@@ -210,6 +179,7 @@ GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
 \ ******************************************************************
 
 INCLUDE "exomiser.s.6502"
+INCLUDE "vgmplayer.s.6502"
 
 
 \ ******************************************************************
@@ -693,13 +663,13 @@ INCLUDE "exomiser.s.6502"
 	LDA #LO(demo_message): LDX #HI(demo_message)
 	LDY #23: JSR init_scr				; top of scroller at Y
 
-	\\ Initialise exomizer - must have some data ready to decrunch
+	\\ Initialise music player - pass in VGM_stream_data address
+	\\ parses header from stream
+; VGM_end_of_data needs to point to the address just after the address
+; of the last byte of crunched data.
 	LDX #LO(VGM_stream_data - 1)
 	LDY #HI(VGM_stream_data - 1)
-	JSR init_decruncher
-
-	\\ Initialise music player - parses header
-	JSR	init_player
+	JSR	init_vgm_stream
 
 	\\ Copy meta data to screen
 	LDX #0
@@ -1907,373 +1877,6 @@ ENDMACRO
 	RTS
 }
 
-
-\ ******************************************************************
-\ *	VGM music player
-\ ******************************************************************
-
-.init_player				; return non-zero if error
-{
-\\ <header section>
-\\  [byte] - header size - indicates number of bytes in header section
-
-	LDA #1
-	STA player_packet_offset
-
-	jsr get_decrunched_byte
-	STA tmp_var
-	CMP #5
-	BCS parse_header			; we need at least 5 bytes to parse!
-	JMP error
-
-	.parse_header
-	CLC
-	ADC player_packet_offset
-	STA player_packet_offset
-
-\\  [byte] - indicates the required playback rate in Hz eg. 50/60/100
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	CMP #PLAYER_sample_rate		; we only support 50Hz files
-	BEQ is_50HZ					; return non-zero to indicate error
-	JMP error
-	.is_50HZ
-	DEC tmp_var
-
-\\  [byte] - packet count lsb
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_packet_count
-	DEC tmp_var
-
-\\  [byte] - packet count msb
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_packet_count+1
-	DEC tmp_var
-
-\\  [byte] - duration minutes
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_duration_mins
-	DEC tmp_var
-
-\\  [byte] - duration seconds
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_duration_secs
-
-	.header_loop
-	DEC tmp_var
-	BEQ done_header
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	\\ don't know what this byte is so ignore it
-	JMP header_loop
-
-	.done_header
-
-\\ <title section>
-\\  [byte] - title string size
-
-	INC player_packet_offset
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA tmp_var
-
-	CLC
-	ADC player_packet_offset
-	STA player_packet_offset
-
-\\  [dd] ... - ZT title string
-
-	LDX #0
-	.title_loop
-	STX tmp_msg_idx
-	LDA tmp_var
-	BEQ done_title				; make sure we consume all the title string
-	DEC tmp_var
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	LDX tmp_msg_idx
-	CPX #PLAYER_string_max
-	BCS title_loop				; don't write if buffer full
-	STA player_song_title,X
-	INX
-	JMP title_loop
-
-	\\ Where title string is smaller than our buffer
-	.done_title
-	STX player_song_title_len
-	LDA #' '
-	.title_pad_loop
-	CPX #PLAYER_string_max
-	BCS done_title_padding
-	STA player_song_title,X
-	INX
-	JMP title_pad_loop
-	.done_title_padding
-
-\\ <author section>
-\\  [byte] - author string size
-
-	INC player_packet_offset
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA tmp_var
-
-	CLC
-	ADC player_packet_offset
-	STA player_packet_offset
-
-\\  [dd] ... - ZT author string
-
-	LDX #0
-	.author_loop
-	STX tmp_msg_idx
-	LDA tmp_var
-	BEQ done_author				; make sure we consume all the author string
-	DEC tmp_var
-
-	jsr get_decrunched_byte		; should really check carry status for EOF
-	LDX tmp_msg_idx
-	CPX #PLAYER_string_max
-	BCS author_loop
-	STA player_song_author,X	; don't write if buffer full
-	INX
-	JMP author_loop
-
-	\\ Where author string is smaller than our buffer
-	.done_author
-	STX player_song_author_len
-	LDA #' '
-	.author_pad_loop
-	CPX #PLAYER_string_max
-	BCS done_author_padding
-	STA player_song_author,X
-	INX
-	JMP author_pad_loop
-	.done_author_padding
-
-	\\ Initialise vars
-	LDA #&FF
-	STA player_counter
-
-	LDA #0
-	STA player_ended
-	STA player_last_reg
-	STA player_reg_bits
-
-	\\ Return zero 
-	RTS
-
-	\\ Return error
-	.error
-	LDA #&FF
-	RTS
-}
-
-.deinit_player
-{
-	\\ Zero volume on all channels
-	LDA #&9F: JSR psg_strobe
-	LDA #&BF: JSR psg_strobe
-	LDA #&DF: JSR psg_strobe
-	LDA #&FF: JSR psg_strobe
-	
-	.return
-	RTS
-}
-
-.poll_player
-{
-	\\ Assume this is called every 20ms..
-	LDA #0
-	STA player_reg_bits
-
-	LDA player_ended
-	BNE _sample_end
-
-\\ <packets section>
-\\  [byte] - indicating number of data writes within the current packet (max 11)
-\\  [dd] ... - data
-\\  [byte] - number of data writes within the next packet
-\\  [dd] ... - data
-\\  ...`
-\\ <eof section>
-\\  [0xff] - eof
-
-	\\ Get next byte from the stream
-	jsr get_decrunched_byte
-	bcs _sample_end
-
-	cmp #&ff
-	beq _player_end
-
-	\\ Byte is #data bytes to send to sound chip:
-	TAY
-	.sound_data_loop
-	BEQ wait_20_ms
-	TYA:PHA
-	jsr get_decrunched_byte
-	bcc not_sample_end
-	PLA
-	JMP _sample_end
-
-	.not_sample_end
-	JSR psg_decode
-	JSR psg_strobe
-	PLA:TAY:DEY
-	JMP sound_data_loop
-	
-	.wait_20_ms
-	INC player_counter				; indicate we have completed another frame of audio
-
-	CLC
-	RTS
-
-	._player_end
-	STA player_ended
-
-	\\ Silence sound chip
-	JSR deinit_player
-
-	INC player_counter				; indicate we have completed one last frame of audio
-
-	._sample_end
-	SEC
-	RTS
-}
-
-.psg_strobe
-{
-	sei					; **SELF-MODIFIED CODE**
-	ldy #255
-	sty $fe43
-	
-	sta $fe41
-	lda #0
-	sta $fe40
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	lda #$08
-	sta $fe40
-	cli					; **SELF-MODIFIED CODE**
-	RTS
-}
-
-PSG_STROBE_SEI_INSN = psg_strobe
-PSG_STROBE_CLI_INSN = psg_strobe + 25
-
-.psg_decode
-{
-	STA player_data
-	AND #SN_FREQ_BYTE_MASK
-	BEQ second_byte
-
-	\\ First byte
-
-	\\ Obtain register fields
-	
-	\\ Get register from bits 7,6,5
-	LDA player_data
-	AND #SN_REG_MASK
-	LSR A:LSR A:LSR A:LSR A
-	STA player_last_reg
-
-	\\ Y is our register number
-	TAY
-
-	\\ Set bit field for each register used this frame
-	LDA num_to_bit,Y				; look up bit for reg number
-	ORA player_reg_bits				; mask in bit
-	STA player_reg_bits
-
-	\\ Is this tone or volume register?
-	TYA
-	AND #&01
-	BEQ process_tone_data
-
-	\\ Volume data
-	LDA player_data
-	AND #SN_VOL_MASK
-	STA player_reg_vals,Y
-
-	\\ Invert volume (0 = max 15 = off)
-	SEC
-	LDA #SN_VOL_MAX
-	SBC player_reg_vals,Y
-	STA player_reg_vals,Y
-	JMP return
-
-	\\ Frequency / tone data
-	.process_tone_data
-	CPY #SN_REG_NOISE_CTRL				; Y already register number
-	BNE tone_channel
-
-	\\ Noise channel
-	LDA player_data
-	AND #(SN_NF_MASK OR SN_FB_MASK)		; store noise freq data
-	STA player_reg_vals,Y
-
-	JMP trigger_beat
-
-	.tone_channel
-	LDA player_data
-	AND #SN_FREQ_FIRST_BYTE_MASK		; F3 - F0
-	LSR A: LSR A						; lose bottom 2 bits
-	STA player_reg_vals,Y
-
-	.trigger_beat
-	\\ trigger the beat effect for this channel
-	TYA:LSR A:TAY						; channel is register / 2
-	LDA #9
-	STA chan_array, Y
-
-	JMP return
-
-	.second_byte
-	LDA player_data
-	AND #SN_FREQ_SECOND_BYTE_MASK		; F9 - F4
-	STA tmp_var
-	ASL A: ASL A						; put 6 bits to top of byte
-	LDY player_last_reg
-	ORA player_reg_vals,Y				; combine with bottom 2 bits
-	STA player_reg_vals,Y
-
-	\\ trigger the beat effect for this channel
-; technically correct, but better visuals without this.
-;	TYA:LSR A:TAY						; channel is register / 2
-;	LDA #9
-;	STA chan_array, Y
-
-	LDA tmp_var
-IF FX_num_freqs == 16
-	\\ 16 frequency bars, so use top 4 bits
-	LSR A : LSR A
-ELSE
-	\\ 32 frequency bars, so use top 5 bits
-	LSR A
-ENDIF
-	
-	\\ clamp final frequency to array range and invert 
-	AND #FX_num_freqs-1
-	STA tmp_var
-	LDA #FX_num_freqs-1
-	SEC
-	SBC tmp_var
-	TAX
-	LDA #15
-	STA freq_array,X
-
-	.return
-	LDA player_data
-	RTS
-}
 
 
 \ ******************************************************************

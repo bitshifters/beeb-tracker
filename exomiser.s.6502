@@ -17,13 +17,12 @@
 ._byte_skip_hi:
 
 ._byte
-	lda &ffff ; VGM_stream_data-1	; **SELF-MODIFIED CODE**
+	lda &ffff ; EXO data stream address	; **SELF-MODIFIED CODE**
 _byte_lo = _byte + 1
 _byte_hi = _byte + 2
 	rts						; decrunch_file is called.
 }
-; VGM_end_of_data needs to point to the address just after the address
-; of the last byte of crunched data.
+
 ; -------------------------------------------------------------------
 
 
