@@ -1,13 +1,19 @@
-
-
+\\ ******************************************************************
 \\ EXOMISER (compression library)
-EXO_buffer_len = 1024			; this is now packed in to language workspace at &0400
-\\ If you want to make this bigger than 1024 then need to find somewhere else to put it!!
+\\ ******************************************************************
+
+\\ Uses memory:
+\\ &0C00-0CFF
+\\ &0400-0800
+\\ Plus ZP vars
 
 
 \ ******************************************************************
 \ *	Space reserved for runtime buffers not preinitialised
 \ ******************************************************************
+
+EXO_buffer_len = 1024			; this is now packed in to language workspace at &0400
+\\ If you want to make this bigger than 1024 then need to find somewhere else to put it!!
 
 \\ Exomiser unpack buffer (must be page aligned)
 \\ Now moved this to the language workspace at &0400 - &0800
@@ -17,27 +23,29 @@ EXO_buffer_end = EXO_buffer_start + EXO_buffer_len
 ; -------------------------------------------------------------------
 ; this 156 byte table area may be relocated. It may also be clobbered
 ; by other data between decrunches.
-; Located at rarely used VDU workspace memory
+; Located at spare OS memory page &0c00 reserved for Econet
 ; -------------------------------------------------------------------
 
-tabl_bi  = &0364
+EXO_TABL_SIZE = 156
+tabl_bi  = &0c00
 tabl_lo = tabl_bi + 52
 tabl_hi = tabl_bi + 104
 
 
-\\ EXOMISER (compression library)
-EXO_zp_src_hi = $70
-EXO_zp_src_lo = EXO_zp_src_hi + 1
-EXO_zp_src_bi = EXO_zp_src_hi + 2
-EXO_zp_bitbuf = EXO_zp_src_hi + 3
+\\ Declare ZP vars
+.EXO_zp_src_hi	SKIP 1
+.EXO_zp_src_lo	SKIP 1
+.EXO_zp_src_bi	SKIP 1
+.EXO_zp_bitbuf	SKIP 1
 
-EXO_zp_len_lo  = $74
-EXO_zp_len_hi  = EXO_zp_len_lo + 1
+.EXO_zp_len_lo	SKIP 1
+.EXO_zp_len_hi	SKIP 1
 
-EXO_zp_bits_lo = $76
-EXO_zp_bits_hi = EXO_zp_bits_lo + 1
+.EXO_zp_bits_lo	SKIP 1
+.EXO_zp_bits_hi	SKIP 1
 
-EXO_zp_dest_hi = $78
-EXO_zp_dest_lo = EXO_zp_dest_hi + 1	; dest addr lo
-EXO_zp_dest_bi = EXO_zp_dest_hi + 2	; dest addr hi
+.EXO_zp_dest_hi	SKIP 1
+.EXO_zp_dest_lo	SKIP 1	; dest addr lo
+.EXO_zp_dest_bi	SKIP 1	; dest addr hi
+
 
