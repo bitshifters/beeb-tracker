@@ -1830,3 +1830,105 @@ EQUS "0123456789abcdef"
 .lookup_tables_end
 
 
+\ ******************************************************************
+\ *	MODE 7 screen data
+\ ******************************************************************
+
+.mode7_data_start
+
+.mode7_screen_data
+INCBIN "data/screen3.mode7"
+
+MENU_original_src_addr = mode7_screen_data + MENU_overlay_ypos * MODE7_char_width
+
+.mode7_font_data				; we use 16/25 lines of this screen
+INCBIN "data/font_5x5_shifted_trimmed.mode7.bin"
+
+mode7_font_data_shifted = mode7_font_data + 8 * 40
+
+.mode7_menu_data
+INCBIN "data/menu_overlay_trimmed.mode7.bin"		; ditto, we only use ~8/25 lines of this screen
+
+MENU_overlay_src_addr = mode7_menu_data		; stripped this off (+ MENU_overlay_ypos * MODE7_char_width)
+
+.mode7_data_end
+
+
+\\ Map character ASCII values to the byte offset into our MODE 7 font
+\\ This is "cunning" but only works because the font has fewer than 256/6 (42) glyphs..
+
+MACRO SET_TELETEXT_FONT_CHAR_MAP
+
+	MAPCHAR 'A', 1
+	MAPCHAR 'B', 4
+	MAPCHAR 'C', 7
+	MAPCHAR 'D', 10
+	MAPCHAR 'E', 13
+	MAPCHAR 'F', 16
+	MAPCHAR 'G', 19
+	MAPCHAR 'H', 22
+	MAPCHAR 'I', 25
+	MAPCHAR 'J', 28
+	MAPCHAR 'K', 31
+	MAPCHAR 'L', 34
+	MAPCHAR 'M', 37
+
+	MAPCHAR 'a', 1
+	MAPCHAR 'b', 4
+	MAPCHAR 'c', 7
+	MAPCHAR 'd', 10
+	MAPCHAR 'e', 13
+	MAPCHAR 'f', 16
+	MAPCHAR 'g', 19
+	MAPCHAR 'h', 22
+	MAPCHAR 'i', 25
+	MAPCHAR 'j', 28
+	MAPCHAR 'k', 31
+	MAPCHAR 'l', 34
+	MAPCHAR 'm', 37
+
+	MAPCHAR 'N', 81
+	MAPCHAR 'O', 84
+	MAPCHAR 'P', 87
+	MAPCHAR 'Q', 90
+	MAPCHAR 'R', 93
+	MAPCHAR 'S', 96
+	MAPCHAR 'T', 99
+	MAPCHAR 'U', 102
+	MAPCHAR 'V', 105
+	MAPCHAR 'W', 108
+	MAPCHAR 'X', 111
+	MAPCHAR 'Y', 114
+	MAPCHAR 'Z', 117
+
+	MAPCHAR 'n', 81
+	MAPCHAR 'o', 84
+	MAPCHAR 'p', 87
+	MAPCHAR 'q', 90
+	MAPCHAR 'r', 93
+	MAPCHAR 's', 96
+	MAPCHAR 't', 99
+	MAPCHAR 'u', 102
+	MAPCHAR 'v', 105
+	MAPCHAR 'w', 108
+	MAPCHAR 'x', 111
+	MAPCHAR 'y', 114
+	MAPCHAR 'z', 117
+
+	MAPCHAR '0', 161
+	MAPCHAR '1', 164
+	MAPCHAR '2', 167
+	MAPCHAR '3', 170
+	MAPCHAR '4', 173
+	MAPCHAR '5', 176
+	MAPCHAR '6', 179
+	MAPCHAR '7', 182
+	MAPCHAR '8', 185
+	MAPCHAR '9', 188
+	MAPCHAR '?', 191
+	MAPCHAR '!', 194
+	MAPCHAR '.', 197
+
+	MAPCHAR ' ', 241
+
+ENDMACRO
