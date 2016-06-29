@@ -40,8 +40,11 @@ EXO_crunch_byte_hi = exo_get_crunched_byte + 10
 ; -------------------------------------------------------------------
 .exo_init_decruncher				; pass in address of (crunched data-1) in X,Y
 {
-	STX EXO_crunch_byte_lo
-	STY EXO_crunch_byte_hi
+	lda #&40					; Ensure RTI at &0D00 for clean NMI handling
+	sta &0D00
+	
+	stx EXO_crunch_byte_lo
+	sty EXO_crunch_byte_hi
 
 	jsr exo_get_crunched_byte
 	sta EXO_zp_bitbuf
