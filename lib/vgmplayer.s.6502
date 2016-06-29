@@ -3,8 +3,10 @@
 \\ Code module
 \ ******************************************************************
 
+VGM_PLAYER_ORG = *
 
-.vgm_player_start
+ORG &0380
+GUARD &03E0
 
 \ ******************************************************************
 \ *	VGM music player data area
@@ -13,6 +15,11 @@
 .vgm_player_song_title		SKIP VGM_PLAYER_string_max
 .vgm_player_song_author_len	SKIP 1
 .vgm_player_song_author		SKIP VGM_PLAYER_string_max
+
+ORG VGM_PLAYER_ORG
+
+.vgm_player_start
+
 
 
 

@@ -2,7 +2,7 @@
 \\ VGM Player module
 \\ Include file
 \\ Define ZP and constant vars only in here
-
+\\ Uses memory &0380-&03DF & ZP
 
 
 \ ******************************************************************
