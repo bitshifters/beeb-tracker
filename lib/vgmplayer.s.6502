@@ -1,29 +1,23 @@
+\ ******************************************************************
 \\ VGM Player
 \\ Code module
-\\ Uses memory &C00-CFF
-
-\\ Store current assembler address so we can restore later
-VGMPLAYER_ORG = *
-
-\ ******************************************************************
-\ *	Space hijacked from OS for runtime buffers not preinitialised
 \ ******************************************************************
 
-ORG &0c00 + EXO_TABL_SIZE				; soft-key storage
-GUARD &0cff
 
+.vgm_player_start
+
+\ ******************************************************************
+\ *	VGM music player data area
+\ ******************************************************************
 .vgm_player_song_title_len	SKIP 1
 .vgm_player_song_title		SKIP VGM_PLAYER_string_max
 .vgm_player_song_author_len	SKIP 1
 .vgm_player_song_author		SKIP VGM_PLAYER_string_max
 
 
-ORG VGMPLAYER_ORG
-
-.vgm_player_start
 
 \ ******************************************************************
-\ *	VGM music player
+\ *	VGM music player routines
 \ * Plays a RAW format VGM music stream from an Exomiser compressed data stream
 \ ******************************************************************
 
