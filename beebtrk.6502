@@ -119,6 +119,31 @@ INCLUDE "lib/beebtracker.s.6502"
 .data_start
 
 
+.menu_data_filename EQUS "BeebDat", 13
+
+
+
+\ ******************************************************************
+\ *	End address to be saved
+\ ******************************************************************
+
+.end
+
+
+
+\ ******************************************************************
+\ *	EXO VGM data file
+\ * This must be compressed using the following flags:
+\ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
+\ ******************************************************************
+
+.VGM_stream_data
+\\ Now loaded at run-time so don't know end of data!
+
+
+
+ORG &0808
+GUARD &0CFF
 
 .menu_data_start
 
@@ -216,23 +241,6 @@ EQUS "Loading... ", 0
 
 .menu_data_end
 
-\ ******************************************************************
-\ *	End address to be saved
-\ ******************************************************************
-
-.end
-
-
-
-\ ******************************************************************
-\ *	EXO VGM data file
-\ * This must be compressed using the following flags:
-\ * exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
-\ ******************************************************************
-
-.VGM_stream_data
-\\ Now loaded at run-time so don't know end of data!
-
 
 
 \ ******************************************************************
@@ -273,7 +281,9 @@ PRINT "------------------------------------------------------------"
 \ *	Save the code
 \ ******************************************************************
 
+
 SAVE "BeebTrk", start, end, main
+SAVE "BeebDat", menu_data_start, menu_data_end
 
 PUTFILE "vgm_botb/BotB 7832 MasterTracker.raw.exo", "V.0", 0
 PUTFILE "vgm_botb/BotB 7383 exception.raw.exo", "V.1", 0	; V.B fails for some wierd reason?
