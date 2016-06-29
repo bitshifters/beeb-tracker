@@ -117,40 +117,44 @@ INCLUDE "lib/beebtracker.s.6502"
 \ ******************************************************************
 
 .data_start
+
+
+
 .menu_data_start
 
-\\ No longer require loading_table but each entry must be exactly 8 bytes
+\\ No longer require loading_table but each entry must be exactly 4 bytes
 \\ Does not have to be aligned but entries have to be fixed size
 \\ This isn't actually any smaller than using pointer tables but fewer things to type I suppose :)
+\\ V.B is an invalid filename for some reason with BeebASM
 
 .vgm_filenames
-EQUS "V.A", 13,0,0,0,0
-EQUS "V.BB", 13,0,0,0
-EQUS "V.C", 13,0,0,0,0
-EQUS "V.D", 13,0,0,0,0
-EQUS "V.E", 13,0,0,0,0
-EQUS "V.F", 13,0,0,0,0
-EQUS "V.G", 13,0,0,0,0
-EQUS "V.H", 13,0,0,0,0
-EQUS "V.I", 13,0,0,0,0
-EQUS "V.J", 13,0,0,0,0
-EQUS "V.K", 13,0,0,0,0
-EQUS "V.L", 13,0,0,0,0
-EQUS "V.M", 13,0,0,0,0
-EQUS "V.N", 13,0,0,0,0
-EQUS "V.O", 13,0,0,0,0
-EQUS "V.P", 13,0,0,0,0
-EQUS "V.Q", 13,0,0,0,0
-EQUS "V.R", 13,0,0,0,0
-EQUS "V.S", 13,0,0,0,0
-EQUS "V.T", 13,0,0,0,0
-EQUS "V.U", 13,0,0,0,0
-EQUS "V.V", 13,0,0,0,0
-EQUS "V.W", 13,0,0,0,0
-EQUS "V.X", 13,0,0,0,0
-EQUS "V.Y", 13,0,0,0,0
-EQUS "V.Z", 13,0,0,0,0
-EQUS "V.ZZ", 13,0,0,0
+EQUS "V.0", 13
+EQUS "V.1", 13
+EQUS "V.2", 13
+EQUS "V.3", 13
+EQUS "V.4", 13
+EQUS "V.5", 13
+EQUS "V.6", 13
+EQUS "V.7", 13
+EQUS "V.8", 13
+EQUS "V.9", 13
+EQUS "V.A", 13
+EQUS "V.C", 13
+EQUS "V.D", 13
+EQUS "V.E", 13
+EQUS "V.F", 13
+EQUS "V.G", 13
+EQUS "V.H", 13
+EQUS "V.I", 13
+EQUS "V.J", 13
+EQUS "V.K", 13
+EQUS "V.L", 13
+EQUS "V.M", 13
+EQUS "V.N", 13
+EQUS "V.O", 13
+EQUS "V.P", 13
+EQUS "V.Q", 13
+EQUS "V.R", 13
 
 
 
@@ -191,7 +195,7 @@ EQUS "27. Run Under Fire              "
 IF COMPILE_OPTION_EXIT
 EQUS "Exit                            "
 ENDIF
-
+.menu_entries_end
 
 \\ Need to put this macro last as I don't know how to undo the character map!
 \\ 
@@ -212,7 +216,6 @@ EQUS "Loading... ", 0
 
 .menu_data_end
 
-
 \ ******************************************************************
 \ *	End address to be saved
 \ ******************************************************************
@@ -229,7 +232,7 @@ EQUS "Loading... ", 0
 
 .VGM_stream_data
 \\ Now loaded at run-time so don't know end of data!
-.VGM_end_of_data
+
 
 
 \ ******************************************************************
@@ -243,13 +246,14 @@ D_SCROLLTEXT_SIZE = scrolltext_end-scrolltext_start
 D_SCREENS_SIZE = mode7_data_end-mode7_data_start
 D_EXO_CODE_SIZE = exo_end-exo_start
 D_VGM_PLAYER_CODE_SIZE = vgm_player_end-vgm_player_start
-
+D_MENU_ENTRIES_SIZE = menu_entries_end-menu_entries
 
 PRINT "------------------------------------------------------------"
 PRINT "Code origin = ", ~CODE_ORIGIN
 
 PRINT "Code size =", end-start-D_MENU_SIZE-D_LOOKUP_SIZE-D_NOTES_SIZE-D_SCROLLTEXT_SIZE-D_SCREENS_SIZE
 PRINT " menu data size =",D_MENU_SIZE
+PRINT " menu entries size =",D_MENU_ENTRIES_SIZE
 PRINT " lookup tables size =",D_LOOKUP_SIZE
 PRINT " note tables size =",D_NOTES_SIZE
 PRINT " scrolltext size =",D_SCROLLTEXT_SIZE
@@ -271,33 +275,33 @@ PRINT "------------------------------------------------------------"
 
 SAVE "BeebTrk", start, end, main
 
-PUTFILE "vgm_botb/BotB 7832 MasterTracker.raw.exo", "V.A", 0
-PUTFILE "vgm_botb/BotB 7383 exception.raw.exo", "V.BB", 0	; V.B fails for some wierd reason?
-PUTFILE "vgm_botb/BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "V.C", 0
-PUTFILE "vgm_botb/BonusZone.raw.exo", "V.D", 0
-PUTFILE "vgm_botb/MISSION76496.raw.exo", "V.E", 0
-PUTFILE "vgm_botb/BotB 7639 lol i am late sorry.raw.exo", "V.F", 0
-PUTFILE "vgm_botb/BotB 4406 sonic_enters_a_dance_club.raw.exo", "V.G", 0
-PUTFILE "vgm_botb/BotB 1643 flashbob - I can haz d00ty caiclz plz.raw.exo", "V.H", 0
-PUTFILE "vgm_botb/BotB 1819 Kulor - Snofer Apostrophy S Infiltration Mission.raw.exo", "V.I", 0
-PUTFILE "vgm_botb/BotB 2310 chunter - overcast.raw.exo", "V.J", 0
-PUTFILE "vgm_botb/BotB 5106 null1024 - iNTeNSiTY.raw.exo", "V.K", 0
-PUTFILE "vgm_botb/BotB 5135 b00daw - kill chipsters on sight!.raw.exo", "V.L", 0
-PUTFILE "vgm_botb/BotB 5181 Kulor - Nintendo Entertainment Samba.raw.exo", "V.M", 0
-PUTFILE "vgm_botb/BotB 7637 happyfuntimes.raw.exo", "V.N", 0
-PUTFILE "vgm_botb/BotB 8493 null1024 - pinky plinky thingy.raw.exo", "V.O", 0
-PUTFILE "vgm_botb/BotB 9302 reg.raw.exo", "V.P", 0
-PUTFILE "vgm_botb/BotB 10995 masks revenge.raw.exo", "V.Q", 0
-PUTFILE "vgm_botb/BotB 10996 gost haus.raw.exo", "V.R", 0
-PUTFILE "vgm_botb/BotB 11925 Interrobang Pie - Adrenaline Lift.raw.exo", "V.S", 0
-PUTFILE "vgm_botb/BotB 12143 DimWiddy - The Long Goodbye.raw.exo", "V.T", 0
-PUTFILE "vgm_botb/BotB 14648 chilled out princess.raw.exo", "V.U", 0
-PUTFILE "vgm_botb/BotB 16712 stewboy - The Circus is in Town.raw.exo", "V.V", 0
-PUTFILE "vgm_botb/BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "V.W", 0
-PUTFILE "vgm_botb/BotB 20609 Jredd - PSG Strut.raw.exo", "V.X", 0
-PUTFILE "vgm_botb/my_mission.raw.exo", "V.Y", 0
-PUTFILE "vgm_botb/my_new_used_car.raw.exo", "V.Z", 0
-PUTFILE "vgm_botb/run_under_fire.raw.exo", "V.ZZ", 0
+PUTFILE "vgm_botb/BotB 7832 MasterTracker.raw.exo", "V.0", 0
+PUTFILE "vgm_botb/BotB 7383 exception.raw.exo", "V.1", 0	; V.B fails for some wierd reason?
+PUTFILE "vgm_botb/BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "V.2", 0
+PUTFILE "vgm_botb/BonusZone.raw.exo", "V.3", 0
+PUTFILE "vgm_botb/MISSION76496.raw.exo", "V.4", 0
+PUTFILE "vgm_botb/BotB 7639 lol i am late sorry.raw.exo", "V.5", 0
+PUTFILE "vgm_botb/BotB 4406 sonic_enters_a_dance_club.raw.exo", "V.6", 0
+PUTFILE "vgm_botb/BotB 1643 flashbob - I can haz d00ty caiclz plz.raw.exo", "V.7", 0
+PUTFILE "vgm_botb/BotB 1819 Kulor - Snofer Apostrophy S Infiltration Mission.raw.exo", "V.8", 0
+PUTFILE "vgm_botb/BotB 2310 chunter - overcast.raw.exo", "V.9", 0
+PUTFILE "vgm_botb/BotB 5106 null1024 - iNTeNSiTY.raw.exo", "V.A", 0
+PUTFILE "vgm_botb/BotB 5135 b00daw - kill chipsters on sight!.raw.exo", "V.C", 0
+PUTFILE "vgm_botb/BotB 5181 Kulor - Nintendo Entertainment Samba.raw.exo", "V.D", 0
+PUTFILE "vgm_botb/BotB 7637 happyfuntimes.raw.exo", "V.E", 0
+PUTFILE "vgm_botb/BotB 8493 null1024 - pinky plinky thingy.raw.exo", "V.F", 0
+PUTFILE "vgm_botb/BotB 9302 reg.raw.exo", "V.G", 0
+PUTFILE "vgm_botb/BotB 10995 masks revenge.raw.exo", "V.H", 0
+PUTFILE "vgm_botb/BotB 10996 gost haus.raw.exo", "V.I", 0
+PUTFILE "vgm_botb/BotB 11925 Interrobang Pie - Adrenaline Lift.raw.exo", "V.J", 0
+PUTFILE "vgm_botb/BotB 12143 DimWiddy - The Long Goodbye.raw.exo", "V.K", 0
+PUTFILE "vgm_botb/BotB 14648 chilled out princess.raw.exo", "V.L", 0
+PUTFILE "vgm_botb/BotB 16712 stewboy - The Circus is in Town.raw.exo", "V.M", 0
+PUTFILE "vgm_botb/BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "V.N", 0
+PUTFILE "vgm_botb/BotB 20609 Jredd - PSG Strut.raw.exo", "V.O", 0
+PUTFILE "vgm_botb/my_mission.raw.exo", "V.P", 0
+PUTFILE "vgm_botb/my_new_used_car.raw.exo", "V.Q", 0
+PUTFILE "vgm_botb/run_under_fire.raw.exo", "V.R", 0
 
 
 

@@ -469,8 +469,6 @@
 
 	\\ Initialise music player - pass in VGM_stream_data address
 	\\ parses header from stream
-; VGM_end_of_data needs to point to the address just after the address
-; of the last byte of crunched data.
 	LDX #LO(VGM_stream_data - 1)
 	LDY #HI(VGM_stream_data - 1)
 	JSR	vgm_init_stream
@@ -604,7 +602,7 @@
 .load_file_from_table			; flle_no = index into our table
 {
 	LDA file_no
-	ASL A:ASL A: ASL A			; file_no * 8
+	ASL A:ASL A					; file_no * 4 bytes per filename
 
 	\\ Set osfile param block
 	CLC
