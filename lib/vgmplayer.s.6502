@@ -12,10 +12,10 @@ VGMPLAYER_ORG = *
 ORG &0c00 + EXO_TABL_SIZE				; soft-key storage
 GUARD &0cff
 
-.player_song_title_len	SKIP 1
-.player_song_title		SKIP PLAYER_string_max
-.player_song_author_len	SKIP 1
-.player_song_author		SKIP PLAYER_string_max
+.vgm_player_song_title_len	SKIP 1
+.vgm_player_song_title		SKIP VGM_PLAYER_string_max
+.vgm_player_song_author_len	SKIP 1
+.vgm_player_song_author		SKIP VGM_PLAYER_string_max
 
 
 ORG VGMPLAYER_ORG
@@ -35,25 +35,25 @@ ORG VGMPLAYER_ORG
 \\ Initialise the VGM player with an Exomizer compressed data stream
 \\ X - lo byte of data stream to be played
 \\ Y - hi byte of data stream to be played
-.init_vgm_stream
+.vgm_init_stream
 {
 	\\ Initialise exomizer - must have some data ready to decrunch
 	JSR init_decruncher
 
 	\\ Initialise music player - parses header
-	JSR	init_player
+	JSR	vgm_init_player
 
 	RTS
 }
 
 
-.init_player				; return non-zero if error
+.vgm_init_player				; return non-zero if error
 {
 \\ <header section>
 \\  [byte] - header size - indicates number of bytes in header section
 
 	LDA #1
-	STA player_packet_offset
+	STA vgm_player_packet_offset
 
 	jsr get_decrunched_byte
 	STA tmp_var
@@ -63,13 +63,13 @@ ORG VGMPLAYER_ORG
 
 	.parse_header
 	CLC
-	ADC player_packet_offset
-	STA player_packet_offset
+	ADC vgm_player_packet_offset
+	STA vgm_player_packet_offset
 
 \\  [byte] - indicates the required playback rate in Hz eg. 50/60/100
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
-	CMP #PLAYER_sample_rate		; we only support 50Hz files
+	CMP #VGM_PLAYER_sample_rate		; we only support 50Hz files
 	BEQ is_50HZ					; return non-zero to indicate error
 	JMP error
 	.is_50HZ
@@ -78,25 +78,25 @@ ORG VGMPLAYER_ORG
 \\  [byte] - packet count lsb
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_packet_count
+	STA vgm_player_packet_count
 	DEC tmp_var
 
 \\  [byte] - packet count msb
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_packet_count+1
+	STA vgm_player_packet_count+1
 	DEC tmp_var
 
 \\  [byte] - duration minutes
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_duration_mins
+	STA vgm_player_duration_mins
 	DEC tmp_var
 
 \\  [byte] - duration seconds
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
-	STA player_duration_secs
+	STA vgm_player_duration_secs
 
 	.header_loop
 	DEC tmp_var
@@ -111,14 +111,14 @@ ORG VGMPLAYER_ORG
 \\ <title section>
 \\  [byte] - title string size
 
-	INC player_packet_offset
+	INC vgm_player_packet_offset
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
 	STA tmp_var
 
 	CLC
-	ADC player_packet_offset
-	STA player_packet_offset
+	ADC vgm_player_packet_offset
+	STA vgm_player_packet_offset
 
 \\  [dd] ... - ZT title string
 
@@ -131,20 +131,20 @@ ORG VGMPLAYER_ORG
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
 	LDX tmp_msg_idx
-	CPX #PLAYER_string_max
+	CPX #VGM_PLAYER_string_max
 	BCS title_loop				; don't write if buffer full
-	STA player_song_title,X
+	STA vgm_player_song_title,X
 	INX
 	JMP title_loop
 
 	\\ Where title string is smaller than our buffer
 	.done_title
-	STX player_song_title_len
+	STX vgm_player_song_title_len
 	LDA #' '
 	.title_pad_loop
-	CPX #PLAYER_string_max
+	CPX #VGM_PLAYER_string_max
 	BCS done_title_padding
-	STA player_song_title,X
+	STA vgm_player_song_title,X
 	INX
 	JMP title_pad_loop
 	.done_title_padding
@@ -152,14 +152,14 @@ ORG VGMPLAYER_ORG
 \\ <author section>
 \\  [byte] - author string size
 
-	INC player_packet_offset
+	INC vgm_player_packet_offset
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
 	STA tmp_var
 
 	CLC
-	ADC player_packet_offset
-	STA player_packet_offset
+	ADC vgm_player_packet_offset
+	STA vgm_player_packet_offset
 
 \\  [dd] ... - ZT author string
 
@@ -172,32 +172,32 @@ ORG VGMPLAYER_ORG
 
 	jsr get_decrunched_byte		; should really check carry status for EOF
 	LDX tmp_msg_idx
-	CPX #PLAYER_string_max
+	CPX #VGM_PLAYER_string_max
 	BCS author_loop
-	STA player_song_author,X	; don't write if buffer full
+	STA vgm_player_song_author,X	; don't write if buffer full
 	INX
 	JMP author_loop
 
 	\\ Where author string is smaller than our buffer
 	.done_author
-	STX player_song_author_len
+	STX vgm_player_song_author_len
 	LDA #' '
 	.author_pad_loop
-	CPX #PLAYER_string_max
+	CPX #VGM_PLAYER_string_max
 	BCS done_author_padding
-	STA player_song_author,X
+	STA vgm_player_song_author,X
 	INX
 	JMP author_pad_loop
 	.done_author_padding
 
 	\\ Initialise vars
 	LDA #&FF
-	STA player_counter
+	STA vgm_player_counter
 
 	LDA #0
-	STA player_ended
-	STA player_last_reg
-	STA player_reg_bits
+	STA vgm_player_ended
+	STA vgm_player_last_reg
+	STA vgm_player_reg_bits
 
 	\\ Return zero 
 	RTS
@@ -224,9 +224,9 @@ ORG VGMPLAYER_ORG
 {
 	\\ Assume this is called every 20ms..
 	LDA #0
-	STA player_reg_bits
+	STA vgm_player_reg_bits
 
-	LDA player_ended
+	LDA vgm_player_ended
 	BNE _sample_end
 
 \\ <packets section>
@@ -262,18 +262,18 @@ ORG VGMPLAYER_ORG
 	JMP sound_data_loop
 	
 	.wait_20_ms
-	INC player_counter				; indicate we have completed another frame of audio
+	INC vgm_player_counter				; indicate we have completed another frame of audio
 
 	CLC
 	RTS
 
 	._player_end
-	STA player_ended
+	STA vgm_player_ended
 
 	\\ Silence sound chip
 	JSR deinit_player
 
-	INC player_counter				; indicate we have completed one last frame of audio
+	INC vgm_player_counter				; indicate we have completed one last frame of audio
 
 	._sample_end
 	SEC
@@ -306,7 +306,7 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 
 .psg_decode
 {
-	STA player_data
+	STA vgm_player_data
 	AND #SN_FREQ_BYTE_MASK
 	BEQ second_byte
 
@@ -315,18 +315,18 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	\\ Obtain register fields
 	
 	\\ Get register from bits 7,6,5
-	LDA player_data
+	LDA vgm_player_data
 	AND #SN_REG_MASK
 	LSR A:LSR A:LSR A:LSR A
-	STA player_last_reg
+	STA vgm_player_last_reg
 
 	\\ Y is our register number
 	TAY
 
 	\\ Set bit field for each register used this frame
 	LDA num_to_bit,Y				; look up bit for reg number
-	ORA player_reg_bits				; mask in bit
-	STA player_reg_bits
+	ORA vgm_player_reg_bits				; mask in bit
+	STA vgm_player_reg_bits
 
 	\\ Is this tone or volume register?
 	TYA
@@ -334,15 +334,15 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	BEQ process_tone_data
 
 	\\ Volume data
-	LDA player_data
+	LDA vgm_player_data
 	AND #SN_VOL_MASK
-	STA player_reg_vals,Y
+	STA vgm_player_reg_vals,Y
 
 	\\ Invert volume (0 = max 15 = off)
 	SEC
 	LDA #SN_VOL_MAX
-	SBC player_reg_vals,Y
-	STA player_reg_vals,Y
+	SBC vgm_player_reg_vals,Y
+	STA vgm_player_reg_vals,Y
 	JMP return
 
 	\\ Frequency / tone data
@@ -351,43 +351,43 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	BNE tone_channel
 
 	\\ Noise channel
-	LDA player_data
+	LDA vgm_player_data
 	AND #(SN_NF_MASK OR SN_FB_MASK)		; store noise freq data
-	STA player_reg_vals,Y
+	STA vgm_player_reg_vals,Y
 
 	JMP trigger_beat
 
 	.tone_channel
-	LDA player_data
+	LDA vgm_player_data
 	AND #SN_FREQ_FIRST_BYTE_MASK		; F3 - F0
 	LSR A: LSR A						; lose bottom 2 bits
-	STA player_reg_vals,Y
+	STA vgm_player_reg_vals,Y
 
 	.trigger_beat
 	\\ trigger the beat effect for this channel
 	TYA:LSR A:TAY						; channel is register / 2
 	LDA #9
-	STA chan_array, Y
+	STA vgm_chan_array, Y
 
 	JMP return
 
 	.second_byte
-	LDA player_data
+	LDA vgm_player_data
 	AND #SN_FREQ_SECOND_BYTE_MASK		; F9 - F4
 	STA tmp_var
 	ASL A: ASL A						; put 6 bits to top of byte
-	LDY player_last_reg
-	ORA player_reg_vals,Y				; combine with bottom 2 bits
-	STA player_reg_vals,Y
+	LDY vgm_player_last_reg
+	ORA vgm_player_reg_vals,Y				; combine with bottom 2 bits
+	STA vgm_player_reg_vals,Y
 
 	\\ trigger the beat effect for this channel
 ; technically correct, but better visuals without this.
 ;	TYA:LSR A:TAY						; channel is register / 2
 ;	LDA #9
-;	STA chan_array, Y
+;	STA vgm_chan_array, Y
 
 	LDA tmp_var
-IF FX_num_freqs == 16
+IF VGM_FX_num_freqs == 16
 	\\ 16 frequency bars, so use top 4 bits
 	LSR A : LSR A
 ELSE
@@ -396,17 +396,17 @@ ELSE
 ENDIF
 	
 	\\ clamp final frequency to array range and invert 
-	AND #FX_num_freqs-1
+	AND #VGM_FX_num_freqs-1
 	STA tmp_var
-	LDA #FX_num_freqs-1
+	LDA #VGM_FX_num_freqs-1
 	SEC
 	SBC tmp_var
 	TAX
 	LDA #15
-	STA freq_array,X
+	STA vgm_freq_array,X
 
 	.return
-	LDA player_data
+	LDA vgm_player_data
 	RTS
 }
 

@@ -90,7 +90,7 @@
 		.no_key_pressed
 
 		\\ Poll the music player
-		LDA player_ended
+		LDA vgm_player_ended
 		BNE song_ended
 
 		\\ Wait for vsync - NO LONGER WAITING FOR VSYNC
@@ -98,9 +98,9 @@
 		;JSR osbyte
 
 		\\ Actually sync to audio instead
-		LDA player_counter
+		LDA vgm_player_counter
 		.wait_for_audio_sync
-		CMP player_counter
+		CMP vgm_player_counter
 		BEQ wait_for_audio_sync
 
 		\\ At this point we know audio data has just been sent to SN
@@ -242,7 +242,7 @@
 		.no_key_pressed
 
 		\\ If track has ended just keep menu around until user action
-		LDA player_ended
+		LDA vgm_player_ended
 		BEQ sync_to_audio
 		
 		\\ If no audio then sync to vsync instead!
@@ -252,9 +252,9 @@
 
 		\\ Sync to audio
 		.sync_to_audio
-		LDA player_counter
+		LDA vgm_player_counter
 		.wait_for_audio_sync
-		CMP player_counter
+		CMP vgm_player_counter
 		BEQ wait_for_audio_sync
 
 		.skip_audio_sync
@@ -473,14 +473,14 @@
 ; of the last byte of crunched data.
 	LDX #LO(VGM_stream_data - 1)
 	LDY #HI(VGM_stream_data - 1)
-	JSR	init_vgm_stream
+	JSR	vgm_init_stream
 
 	\\ Copy meta data to screen
 	LDX #0
 	.meta_loop
-	LDA player_song_title,X
+	LDA vgm_player_song_title,X
 	STA META_title_addr,X
-	LDA player_song_author,X
+	LDA vgm_player_song_author,X
 	STA META_author_addr,X
 	INX
 	CPX #META_max_width
@@ -502,14 +502,14 @@
 	LDA #HI(META_duration_addr)
 	STA writeptr+1
 
-	LDX player_duration_mins
-	LDY player_duration_secs
+	LDX vgm_player_duration_mins
+	LDY vgm_player_duration_secs
 	JSR write_clock_at_writeptr
 	
 	\\ Setup the playtime bar
-	LDA player_packet_count
+	LDA vgm_player_packet_count
 	STA playtime_interval
-	LDA player_packet_count+1
+	LDA vgm_player_packet_count+1
 	STA playtime_interval+1
 	LDA #FX_playtime_width
 	STA playtime_index
@@ -557,7 +557,7 @@
 	JSR poll_scr
 
 	\\ Poll the music player
-	LDA player_ended
+	LDA vgm_player_ended
 
 	.return
 	RTS
@@ -876,11 +876,11 @@
 .init_fx
 {
 	\\ Initialise the frequency array & beat bar array
-	\\ freq_array is followed by chan_array, so we can process all together
-	LDY #(FX_num_freqs+FX_num_channels) - 1
+	\\ vgm_freq_array is followed by vgm_chan_array, so we can process all together
+	LDY #(VGM_FX_num_freqs+VGM_FX_num_channels) - 1
 	LDA #0
 	.loop
-	STA freq_array,Y
+	STA vgm_freq_array,Y
 	DEY
 	BPL loop
 
@@ -935,7 +935,7 @@
 .draw_beat_bar
 {
 	TAY
-	LDA chan_array, Y
+	LDA vgm_chan_array, Y
 	CLC
 	ADC #1
 	STA tmp_fx_y
@@ -1013,12 +1013,12 @@
 	\\ get frequency level
 	TXA
 	
-IF FX_num_freqs == 16
+IF VGM_FX_num_freqs == 16
 	LSR A
 ENDIF
 
 	TAY
-	LDA freq_array, Y
+	LDA vgm_freq_array, Y
 	
 	CLC
 	ADC #1			; this hack forces levels to be a minimum of 1
@@ -1033,7 +1033,7 @@ ENDIF
 	ADC tmp_fx_y
 	TAY
 	
-IF FX_num_freqs == 16
+IF VGM_FX_num_freqs == 16
 	\\ render the 5 byte bar column, 2 chrs per bar, 2nd bar has right hand column removed
 	LDA fx_table + 4, Y
 	STA FX_address_row0+0, X
@@ -1059,7 +1059,7 @@ IF FX_num_freqs == 16
 	INX
 	INX
 	TXA
-	CMP #FX_num_freqs*2
+	CMP #VGM_FX_num_freqs*2
 ELSE
 	\\ render the 5 byte bar column, 1 chr per bar
 	LDA fx_table + 4, Y
@@ -1080,7 +1080,7 @@ ELSE
 	\\ advance to next column
 	INX
 	TXA
-	CMP #FX_num_freqs
+	CMP #VGM_FX_num_freqs
 ENDIF
 
 	BNE fx_column_loop
@@ -1104,29 +1104,29 @@ ENDIF
 	.skip_beat_bars
 	
 	\\ Let VU meter values fall to zero
-	LDY #(FX_num_freqs) - 1
+	LDY #(VGM_FX_num_freqs) - 1
 	.loop
-	LDA freq_array,Y
+	LDA vgm_freq_array,Y
 	BEQ zero
 	SEC
 	SBC #1
-	STA freq_array,Y
+	STA vgm_freq_array,Y
 	.zero
 	DEY
 	BPL loop
 	
 	\\ Beat bars decay 2x faster
-	LDY #(FX_num_channels) - 1
+	LDY #(VGM_FX_num_channels) - 1
 	.loop2
-	LDA chan_array,Y
+	LDA vgm_chan_array,Y
 	BEQ zero2
 	SEC
 	SBC #1
-	STA chan_array,Y
+	STA vgm_chan_array,Y
 	BEQ zero2
 	SEC
 	SBC #1
-	STA chan_array,Y	
+	STA vgm_chan_array,Y	
 	.zero2
 	DEY
 	BPL loop2
@@ -1185,9 +1185,9 @@ ENDIF
 		\\ Update meta index
 		INC meta_idx
 		LDA meta_idx
-		CMP #PLAYER_string_max - META_max_width - 1
+		CMP #VGM_PLAYER_string_max - META_max_width - 1
 		BEQ longer_wait
-		CMP #PLAYER_string_max - META_max_width
+		CMP #VGM_PLAYER_string_max - META_max_width
 		BCC meta_no_wrap
 
 		LDA #0
@@ -1207,9 +1207,9 @@ ENDIF
 		STA tmp_var				; end
 	
 		\\ Handle title end
-		CMP player_song_title_len
+		CMP vgm_player_song_title_len
 		BCC title_end_safe
-		LDA player_song_title_len
+		LDA vgm_player_song_title_len
 		.title_end_safe
 		SEC
 		SBC #META_max_width		; start
@@ -1217,17 +1217,17 @@ ENDIF
 		LDA #0
 		.title_start_safe
 		CLC
-		ADC #LO(player_song_title)
+		ADC #LO(vgm_player_song_title)
 		STA title_addr+1
-		LDA #HI(player_song_title)
+		LDA #HI(vgm_player_song_title)
 		ADC #0
 		STA title_addr+2
 
 		\\ Handle author end
 		LDA tmp_var
-		CMP player_song_author_len
+		CMP vgm_player_song_author_len
 		BCC author_end_safe
-		LDA player_song_author_len
+		LDA vgm_player_song_author_len
 		.author_end_safe
 		SEC
 		SBC #META_max_width		; start
@@ -1235,19 +1235,19 @@ ENDIF
 		LDA #0
 		.author_start_safe
 		CLC
-		ADC #LO(player_song_author)
+		ADC #LO(vgm_player_song_author)
 		STA author_addr+1
-		LDA #HI(player_song_author)
+		LDA #HI(vgm_player_song_author)
 		ADC #0
 		STA author_addr+2
 
 		LDX #0
 		.meta_loop
 		.title_addr
-		LDA player_song_title,X
+		LDA vgm_player_song_title,X
 		STA META_title_addr,X
 		.author_addr
-		LDA player_song_author,X
+		LDA vgm_player_song_author,X
 		STA META_author_addr,X
 		INX
 		CPX #META_max_width
@@ -1259,7 +1259,7 @@ ENDIF
 	{
 		INC meta_poll_count
 		LDA meta_poll_count
-		CMP #PLAYER_sample_rate
+		CMP #VGM_PLAYER_sample_rate
 		BNE not_sec_yet
 
 		\\ Reset counter
@@ -1528,7 +1528,7 @@ ENDMACRO
 	\\ **Instead writing our live data into bottom line!**
 	\\ Write our current line number as decimal
 
-	LDA player_counter
+	LDA vgm_player_counter
 	LDX #TRACKER_lineno_field_xpos + 1			; +1 because leading 0 is constant
 	LDY #TRACKER_bottom_line_ypos
 	JSR write_decimal_at
@@ -1539,11 +1539,11 @@ ENDMACRO
 	.write_field_channel3
 	{
 		LDY #12
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_TONE3_FREQ		; channel 3 tone
 		BEQ no_ch3_tone
 
-		LDX player_reg_vals + SN_REG_TONE3_FREQ
+		LDX vgm_player_reg_vals + SN_REG_TONE3_FREQ
 		JSR write_note_name
 		BNE try_ch3_vol		; OK because last instruction is INY
 
@@ -1551,11 +1551,11 @@ ENDMACRO
 		JSR write_note_blank
 
 		.try_ch3_vol
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_TONE3_VOL		; channel 3 vol
 		BEQ no_ch3_vol
 
-		LDX player_reg_vals + SN_REG_TONE3_VOL
+		LDX vgm_player_reg_vals + SN_REG_TONE3_VOL
 		WRITE_VOL_CHAR
 		BNE done_ch3		; OK because A is char therefore not zero
 
@@ -1568,11 +1568,11 @@ ENDMACRO
 	.write_field_channel2
 	{
 		LDY #19
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_TONE2_FREQ		; channel 2 tone
 		BEQ no_ch2_tone
 
-		LDX player_reg_vals + SN_REG_TONE2_FREQ
+		LDX vgm_player_reg_vals + SN_REG_TONE2_FREQ
 		JSR write_note_name
 		BNE try_ch2_vol		; OK because last instruction is INY
 
@@ -1580,11 +1580,11 @@ ENDMACRO
 		JSR write_note_blank
 
 		.try_ch2_vol
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_TONE2_VOL		; channel 2 vol
 		BEQ no_ch2_vol
 
-		LDX player_reg_vals + SN_REG_TONE2_VOL
+		LDX vgm_player_reg_vals + SN_REG_TONE2_VOL
 		WRITE_VOL_CHAR
 		BNE done_ch2		; OK because A is char therefore not zero
 
@@ -1597,11 +1597,11 @@ ENDMACRO
 	.write_field_channel1
 	{
 		LDY #26
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_TONE1_FREQ		; channel 1 tone
 		BEQ no_ch1_tone
 
-		LDX player_reg_vals + SN_REG_TONE1_FREQ
+		LDX vgm_player_reg_vals + SN_REG_TONE1_FREQ
 		JSR write_note_name
 		BNE try_ch1_vol		; OK because last instruction is INY
 
@@ -1609,11 +1609,11 @@ ENDMACRO
 		JSR write_note_blank
 
 		.try_ch1_vol
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_TONE1_VOL		; channel 1 vol
 		BEQ no_ch1_vol
 
-		LDX player_reg_vals + SN_REG_TONE1_VOL
+		LDX vgm_player_reg_vals + SN_REG_TONE1_VOL
 		WRITE_VOL_CHAR
 		BNE done_ch1		; OK because A is char therefore not zero
 
@@ -1626,12 +1626,12 @@ ENDMACRO
 	.write_field_noise
 	{
 		LDY #33
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_NOISE_CTRL		; noise channel control
 		BEQ no_noise_tone
 
 		\\ Check noise control
-		LDA player_reg_vals + SN_REG_NOISE_CTRL
+		LDA vgm_player_reg_vals + SN_REG_NOISE_CTRL
 		AND #SN_FB_MASK
 		BEQ noise_periodic
 		LDA #'W'					; White Noise
@@ -1641,7 +1641,7 @@ ENDMACRO
 		STA (writeptr),Y
 		INY
 
-		LDA player_reg_vals + SN_REG_NOISE_CTRL
+		LDA vgm_player_reg_vals + SN_REG_NOISE_CTRL
 		AND #SN_NF_MASK
 		ASL A						; *2
 		TAX
@@ -1658,11 +1658,11 @@ ENDMACRO
 		JSR write_note_blank
 
 		.try_noise_vol
-		LDA player_reg_bits
+		LDA vgm_player_reg_bits
 		AND #SN_BIT_NOISE_VOL		; noise channel vol
 		BEQ no_noise_vol
 
-		LDX player_reg_vals + SN_REG_NOISE_VOL
+		LDX vgm_player_reg_vals + SN_REG_NOISE_VOL
 		WRITE_VOL_CHAR
 		BNE done_noise				; OK because A is char therefore not zero
 
