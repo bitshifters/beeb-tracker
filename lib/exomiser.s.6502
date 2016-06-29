@@ -7,10 +7,10 @@
 
 ; -------------------------------------------------------------------
 ; Fetch byte from an exomiser compressed data stream
-; for this get_crunched_byte routine to work the crunched data has to be
+; for this exo_get_crunched_byte routine to work the crunched data has to be
 ; crunced using the -m <buffersize> and possibly the -l flags. Any other
 ; flag will just mess things up.
-.get_crunched_byte
+.exo_get_crunched_byte
 {
 	INC _byte_lo
 	bne _byte_skip_hi
@@ -27,8 +27,8 @@ _byte_hi = _byte + 2
 ; -------------------------------------------------------------------
 
 
-EXO_crunch_byte_lo = get_crunched_byte + 9
-EXO_crunch_byte_hi = get_crunched_byte + 10
+EXO_crunch_byte_lo = exo_get_crunched_byte + 9
+EXO_crunch_byte_hi = exo_get_crunched_byte + 10
 
 
 
@@ -38,12 +38,12 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ; no constraints on register content, however the
 ; decimal flag has to be #0 (it almost always is, otherwise do a cld)
 ; -------------------------------------------------------------------
-.init_decruncher				; pass in address of (crunched data-1) in X,Y
+.exo_init_decruncher				; pass in address of (crunched data-1) in X,Y
 {
 	STX EXO_crunch_byte_lo
 	STY EXO_crunch_byte_hi
 
-	jsr get_crunched_byte
+	jsr exo_get_crunched_byte
 	sta EXO_zp_bitbuf
 
 	ldx #0
@@ -71,19 +71,19 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 	dex
 	bpl _init_rolle		; c = 0 after this (rol EXO_zp_bits_hi)
 
-	adc tabl_lo-1,y
+	adc exo_tabl_lo-1,y
 	tax
 
 	lda EXO_zp_bits_hi
-	adc tabl_hi-1,y
+	adc exo_tabl_hi-1,y
 ._init_shortcut
-	sta tabl_hi,y
+	sta exo_tabl_hi,y
 	txa
-	sta tabl_lo,y
+	sta exo_tabl_lo,y
 
 	ldx #4
-	jsr _bit_get_bits		; clears x-reg.
-	sta tabl_bi,y
+	jsr exo_bit_get_bits		; clears x-reg.
+	sta exo_tabl_bi,y
 	iny
 	cpy #52
 	bne _init_nextone
@@ -96,19 +96,19 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ; -------------------------------------------------------------------
 ; decrunch one byte
 ;
-.get_decrunched_byte
+.exo_get_decrunched_byte
 {
 	ldy EXO_zp_len_lo
 	bne _do_sequence
 	ldx EXO_zp_len_hi
 	bne _do_sequence2
 
-	jsr _bit_get_bit1
+	jsr exo_bit_get_bit1
 	beq _get_sequence
 ; -------------------------------------------------------------------
 ; literal handling (13 bytes)
 ;
-	jsr get_crunched_byte
+	jsr exo_get_crunched_byte
 	bcc _do_literal
 ; -------------------------------------------------------------------
 ; count zero bits + 1 to get length table index (10 bytes)
@@ -117,19 +117,19 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ._get_sequence
 ._seq_next1
 	iny
-	jsr _bit_get_bit1
+	jsr exo_bit_get_bit1
 	beq _seq_next1
 	cpy #$11
 	bcs _do_exit
 ; -------------------------------------------------------------------
 ; calulate length of sequence (zp_len) (17 bytes)
 ;
-	ldx tabl_bi - 1,y
-	jsr _bit_get_bits
-	adc tabl_lo - 1,y
+	ldx exo_tabl_bi - 1,y
+	jsr exo_bit_get_bits
+	adc exo_tabl_lo - 1,y
 	sta EXO_zp_len_lo
 	lda EXO_zp_bits_hi
-	adc tabl_hi - 1,y
+	adc exo_tabl_hi - 1,y
 	sta EXO_zp_len_hi
 ; -------------------------------------------------------------------
 ; here we decide what offset table to use (20 bytes)
@@ -142,16 +142,16 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ._seq_nots123
 	ldy #$03
 ._seq_size123
-	ldx tabl_bit - 1,y
-	jsr _bit_get_bits
-	adc tabl_off - 1,y
+	ldx exo_tabl_bit - 1,y
+	jsr exo_bit_get_bits
+	adc exo_tabl_off - 1,y
 	tay
 ; -------------------------------------------------------------------
 ; calulate absolute offset (zp_src) (27 bytes)
 ;
-	ldx tabl_bi,y
-	jsr _bit_get_bits;
-	adc tabl_lo,y
+	ldx exo_tabl_bi,y
+	jsr exo_bit_get_bits;
+	adc exo_tabl_lo,y
 	bcc _seq_skipcarry
 	inc EXO_zp_bits_hi
 	clc
@@ -159,7 +159,7 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 	adc EXO_zp_dest_lo
 	sta EXO_zp_src_lo
 	lda EXO_zp_bits_hi
-	adc tabl_hi,y
+	adc exo_tabl_hi,y
 	adc EXO_zp_dest_hi
 ; -------------------------------------------------------------------
 	cmp #HI(EXO_buffer_len)
@@ -223,11 +223,11 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ; -------------------------------------------------------------------
 ; two small static tables (6 bytes)
 ;
-.tabl_bit
+.exo_tabl_bit
 {
 	EQUB 2,4,4
 }
-.tabl_off
+.exo_tabl_off
 {
 	EQUB 48,32,16
 }
@@ -235,7 +235,7 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ; -------------------------------------------------------------------
 ; get x + 1 bits (1 byte)
 ;
-._bit_get_bit1
+.exo_bit_get_bit1
 	inx
 ; -------------------------------------------------------------------
 ; get bits (31 bytes)
@@ -252,7 +252,7 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ;   y is untouched
 ;   other status bits are set to (a == #0)
 ; -------------------------------------------------------------------
-._bit_get_bits
+.exo_bit_get_bits
 {
 	lda #$00
 	sta EXO_zp_bits_lo
@@ -263,7 +263,7 @@ EXO_crunch_byte_hi = get_crunched_byte + 10
 ._bit_bits_next
 	lsr a
 	bne _bit_ok
-	jsr get_crunched_byte
+	jsr exo_get_crunched_byte
 	ror a
 ._bit_ok
 	rol EXO_zp_bits_lo

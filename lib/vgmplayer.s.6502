@@ -38,7 +38,7 @@ ORG VGMPLAYER_ORG
 .vgm_init_stream
 {
 	\\ Initialise exomizer - must have some data ready to decrunch
-	JSR init_decruncher
+	JSR exo_init_decruncher
 
 	\\ Initialise music player - parses header
 	JSR	vgm_init_player
@@ -55,7 +55,7 @@ ORG VGMPLAYER_ORG
 	LDA #1
 	STA vgm_player_packet_offset
 
-	jsr get_decrunched_byte
+	jsr exo_get_decrunched_byte
 	STA tmp_var
 	CMP #5
 	BCS parse_header			; we need at least 5 bytes to parse!
@@ -68,7 +68,7 @@ ORG VGMPLAYER_ORG
 
 \\  [byte] - indicates the required playback rate in Hz eg. 50/60/100
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	CMP #VGM_PLAYER_sample_rate		; we only support 50Hz files
 	BEQ is_50HZ					; return non-zero to indicate error
 	JMP error
@@ -77,32 +77,32 @@ ORG VGMPLAYER_ORG
 
 \\  [byte] - packet count lsb
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	STA vgm_player_packet_count
 	DEC tmp_var
 
 \\  [byte] - packet count msb
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	STA vgm_player_packet_count+1
 	DEC tmp_var
 
 \\  [byte] - duration minutes
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	STA vgm_player_duration_mins
 	DEC tmp_var
 
 \\  [byte] - duration seconds
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	STA vgm_player_duration_secs
 
 	.header_loop
 	DEC tmp_var
 	BEQ done_header
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	\\ don't know what this byte is so ignore it
 	JMP header_loop
 
@@ -113,7 +113,7 @@ ORG VGMPLAYER_ORG
 
 	INC vgm_player_packet_offset
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	STA tmp_var
 
 	CLC
@@ -129,7 +129,7 @@ ORG VGMPLAYER_ORG
 	BEQ done_title				; make sure we consume all the title string
 	DEC tmp_var
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	LDX tmp_msg_idx
 	CPX #VGM_PLAYER_string_max
 	BCS title_loop				; don't write if buffer full
@@ -154,7 +154,7 @@ ORG VGMPLAYER_ORG
 
 	INC vgm_player_packet_offset
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	STA tmp_var
 
 	CLC
@@ -170,7 +170,7 @@ ORG VGMPLAYER_ORG
 	BEQ done_author				; make sure we consume all the author string
 	DEC tmp_var
 
-	jsr get_decrunched_byte		; should really check carry status for EOF
+	jsr exo_get_decrunched_byte		; should really check carry status for EOF
 	LDX tmp_msg_idx
 	CPX #VGM_PLAYER_string_max
 	BCS author_loop
@@ -239,7 +239,7 @@ ORG VGMPLAYER_ORG
 \\  [0xff] - eof
 
 	\\ Get next byte from the stream
-	jsr get_decrunched_byte
+	jsr exo_get_decrunched_byte
 	bcs _sample_end
 
 	cmp #&ff
@@ -250,7 +250,7 @@ ORG VGMPLAYER_ORG
 	.sound_data_loop
 	BEQ wait_20_ms
 	TYA:PHA
-	jsr get_decrunched_byte
+	jsr exo_get_decrunched_byte
 	bcc not_sample_end
 	PLA
 	JMP _sample_end

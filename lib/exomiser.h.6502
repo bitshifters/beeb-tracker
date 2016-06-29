@@ -27,9 +27,9 @@ EXO_buffer_end = EXO_buffer_start + EXO_buffer_len
 ; -------------------------------------------------------------------
 
 EXO_TABL_SIZE = 156
-tabl_bi  = &0c00
-tabl_lo = tabl_bi + 52
-tabl_hi = tabl_bi + 104
+exo_tabl_bi  = &0c00
+exo_tabl_lo = exo_tabl_bi + 52
+exo_tabl_hi = exo_tabl_bi + 104
 
 
 \\ Declare ZP vars
