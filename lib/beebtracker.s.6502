@@ -2,8 +2,9 @@
 \\ Beeb Tracker 
 \ ******************************************************************
 
-
-
+note_name_table_0 = &900
+note_name_table_1 = &A00
+note_name_table_2 = &B00
 
 
 .tracker_main
@@ -15,7 +16,7 @@
 	\\ Load first file in our list
 	LDA #0
 	STA file_no
-
+	STA note_table_loaded
 
 	\\ Intro screen goes here \\
 
@@ -37,6 +38,32 @@
 		ldy #HI(load_eventv)
 		JSR start_eventv
 
+		\\ Load note table if required
+		LDA note_table_loaded
+		BNE load_vgm_file
+
+		\\ Set osfile param block
+		LDA #LO(notes_filename)
+		STA osfile_params + 0
+		LDA #HI(notes_filename)
+		STA osfile_params + 1
+
+		LDA #LO(note_name_table_0)
+		STA osfile_params + 2
+		LDA #HI(note_name_table_0)
+		STA osfile_params + 3
+
+		LDA #0
+		STA osfile_params + 6
+
+		\\ Issue osfile call
+		LDX #LO(osfile_params)
+		LDY #HI(osfile_params)
+		LDA #&FF
+		STA note_table_loaded
+		JSR osfile
+
+		.load_vgm_file
 		\\ Blocking file load
 		JSR load_file_from_table
 		PHA							; store return value
@@ -1814,18 +1841,7 @@ EQUS "0123456789abcdef"
 .noise_note_2 EQUS "Hi"
 .noise_note_3 EQUS "T1"
 
-.note_tables_start
-
-\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
-\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
-;ALIGN &100		; doesn't need to be page aligned
-.note_name_table_0 EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
-;note_name_table_1 EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
-\\ Quirk of MODE 7: ASCII 35='#' but in gfx mode 35+128='£' so need to use ASCII 95='_' so in gfx mode 95+128='#'
-.note_name_table_1 EQUS "----_-_-_--_-_---_-_---_--_---__--__----___--___------___---____--------____----_____----------______------______--------------________--------________---------_________---------------------___________------------_____________----------------------------__"
-.note_name_table_2 EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
-
-.note_tables_end
+.notes_filename EQUS "NOTES", 13
 
 .lookup_tables_end
 
@@ -1930,5 +1946,81 @@ MACRO SET_TELETEXT_FONT_CHAR_MAP
 	MAPCHAR '.', 197
 
 	MAPCHAR ' ', 241
+
+ENDMACRO
+
+MACRO UNSET_TELETEXT_FONT_CHAR_MAP
+
+	MAPCHAR 'A', 'A'
+	MAPCHAR 'B', 'B'
+	MAPCHAR 'C', 'C'
+	MAPCHAR 'D', 'D'
+	MAPCHAR 'E', 'E'
+	MAPCHAR 'F', 'F'
+	MAPCHAR 'G', 'G'
+	MAPCHAR 'H', 'H'
+	MAPCHAR 'I', 'I'
+	MAPCHAR 'J', 'J'
+	MAPCHAR 'K', 'K'
+	MAPCHAR 'L', 'L'
+	MAPCHAR 'M', 'M'
+
+	MAPCHAR 'a', 'a'
+	MAPCHAR 'b', 'b'
+	MAPCHAR 'c', 'c'
+	MAPCHAR 'd', 'd'
+	MAPCHAR 'e', 'e'
+	MAPCHAR 'f', 'f'
+	MAPCHAR 'g', 'g'
+	MAPCHAR 'h', 'h'
+	MAPCHAR 'i', 'i'
+	MAPCHAR 'j', 'j'
+	MAPCHAR 'k', 'k'
+	MAPCHAR 'l', 'l'
+	MAPCHAR 'm', 'm'
+
+	MAPCHAR 'N', 'N'
+	MAPCHAR 'O', 'O'
+	MAPCHAR 'P', 'P'
+	MAPCHAR 'Q', 'Q'
+	MAPCHAR 'R', 'R'
+	MAPCHAR 'S', 'S'
+	MAPCHAR 'T', 'T'
+	MAPCHAR 'U', 'U'
+	MAPCHAR 'V', 'V'
+	MAPCHAR 'W', 'W'
+	MAPCHAR 'X', 'X'
+	MAPCHAR 'Y', 'Y'
+	MAPCHAR 'Z', 'Z'
+
+	MAPCHAR 'n', 'n'
+	MAPCHAR 'o', 'o'
+	MAPCHAR 'p', 'p'
+	MAPCHAR 'q', 'q'
+	MAPCHAR 'r', 'r'
+	MAPCHAR 's', 's'
+	MAPCHAR 't', 't'
+	MAPCHAR 'u', 'u'
+	MAPCHAR 'v', 'v'
+	MAPCHAR 'w', 'w'
+	MAPCHAR 'x', 'x'
+	MAPCHAR 'y', 'y'
+	MAPCHAR 'z', 'z'
+
+	MAPCHAR '0', '0'
+	MAPCHAR '1', '1'
+	MAPCHAR '2', '2'
+	MAPCHAR '3', '3'
+	MAPCHAR '4', '4'
+	MAPCHAR '5', '5'
+	MAPCHAR '6', '6'
+	MAPCHAR '7', '7'
+	MAPCHAR '8', '8'
+	MAPCHAR '9', '9'
+	MAPCHAR '?', '?'
+	MAPCHAR '!', '!'
+	MAPCHAR '.', '.'
+
+	MAPCHAR ' ', ' '
 
 ENDMACRO

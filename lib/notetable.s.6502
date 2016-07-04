@@ -1,0 +1,12 @@
+.note_tables_start
+
+\\ Note name lookup table, index using upper 8 bits of a 10-bit tone value.
+\\ Not mega accurate, but fast, and good enough for a reasonably convincing visual 
+;ALIGN &100		; doesn't need to be page aligned
+EQUS "AAAAGECAFEDCAGGFEDDCCCAGGGFFFEDDDDCCCCAAGGGGGFFFFFFEEEDDDDDDCCCCCCCCAAAAGGGGGGGGFFFFFFFFFFEEEEEDDDDDDDDDDDDCCCCCCCCCCCCCBBBBBBBAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBAA"
+;EQUS "----#-#-#--#-#---#-#---#--#---##--##----###--###------###---####--------####----#####----------######------######--------------########--------########---------#########---------------------###########------------#############----------------------------##"
+\\ Quirk of MODE 7: ASCII 35='#' but in gfx mode 35+128='£' so need to use ASCII 95='_' so in gfx mode 95+128='#'
+EQUS "----_-_-_--_-_---_-_---_--_---__--__----___--___------___---____--------____----_____----------______------______--------------________--------________---------_________---------------------___________------------_____________----------------------------__"
+EQUS "9999999888887777777777666666666666666655555555555555555555555555555544444444444444444444444444444444444444444444444444443333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322222222222222222"
+
+.note_tables_end
