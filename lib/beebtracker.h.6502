@@ -119,7 +119,6 @@ META_duration_addr = MODE7_base_addr + 6 * MODE7_char_width + 33		; duration dis
 .playtime_counter		SKIP 2
 .playtime_index			SKIP 1		; current X offset of playtime bar (0-47)
 
-.note_table_loaded		SKIP 1
 
 \ ******************************************************************
 \ *	Space hijacked from OS for runtime buffers not preinitialised

@@ -137,7 +137,7 @@ EQUS "V.J", 13,0,0,0,0
 EQUS "V.K", 13,0,0,0,0
 EQUS "V.L", 13,0,0,0,0
 EQUS "V.M", 13,0,0,0,0
-EQUS "V.NN", 13,0,0,0
+EQUS "V.N", 13,0,0,0,0
 EQUS "V.O", 13,0,0,0,0
 EQUS "V.P", 13,0,0,0,0
 EQUS "V.Q", 13,0,0,0,0
@@ -210,8 +210,6 @@ EQUS "Loading... ", 0
 
 .scrolltext_end
 
-UNSET_TELETEXT_FONT_CHAR_MAP
-
 .menu_data_end
 
 
@@ -240,6 +238,7 @@ UNSET_TELETEXT_FONT_CHAR_MAP
 
 D_MENU_SIZE = menu_data_end-menu_data_start
 D_LOOKUP_SIZE = lookup_tables_end-lookup_tables_start
+D_NOTES_SIZE = note_tables_end-note_tables_start
 D_SCROLLTEXT_SIZE = scrolltext_end-scrolltext_start
 D_SCREENS_SIZE = mode7_data_end-mode7_data_start
 D_EXO_CODE_SIZE = exo_end-exo_start
@@ -252,6 +251,7 @@ PRINT "Code origin = ", ~CODE_ORIGIN
 PRINT "Code size =", end-start-D_MENU_SIZE-D_LOOKUP_SIZE-D_NOTES_SIZE-D_SCROLLTEXT_SIZE-D_SCREENS_SIZE
 PRINT " menu data size =",D_MENU_SIZE
 PRINT " lookup tables size =",D_LOOKUP_SIZE
+PRINT " note tables size =",D_NOTES_SIZE
 PRINT " scrolltext size =",D_SCROLLTEXT_SIZE
 PRINT " MODE 7 screen size =", D_SCREENS_SIZE
 PRINT " VGM Player code size = ", D_VGM_PLAYER_CODE_SIZE
@@ -269,66 +269,34 @@ PRINT "------------------------------------------------------------"
 \ *	Save the code
 \ ******************************************************************
 
-SAVE "BEEBTRK", start, end, main
+SAVE "BeebTrk", start, end, main
 
-INCLUDE "lib/notetable.s.6502"
-SAVE "NOTES", note_tables_start, note_tables_end, 0
-D_NOTES_SIZE = note_tables_end-note_tables_start
-PRINT " note tables size =",D_NOTES_SIZE
-
-PRINT "V.A"
 PUTFILE "vgm_botb/BotB 7832 MasterTracker.raw.exo", "V.A", 0
-PRINT "V.BB"
-PUTFILE "vgm_botb/BotB 7383 exception.raw.exo", "V.BB", 0	; V.B fails for some wierd reason - must be prev BEEBTRK file?
-PRINT "V.C"
+PUTFILE "vgm_botb/BotB 7383 exception.raw.exo", "V.BB", 0	; V.B fails for some wierd reason?
 PUTFILE "vgm_botb/BotB 16433 Slimeball - Fluid Dynamics.raw.exo", "V.C", 0
-PRINT "V.D"
 PUTFILE "vgm_botb/BonusZone.raw.exo", "V.D", 0
-PRINT "V.E"
 PUTFILE "vgm_botb/MISSION76496.raw.exo", "V.E", 0
-PRINT "V.F"
 PUTFILE "vgm_botb/BotB 7639 lol i am late sorry.raw.exo", "V.F", 0
-PRINT "V.G"
 PUTFILE "vgm_botb/BotB 4406 sonic_enters_a_dance_club.raw.exo", "V.G", 0
-PRINT "V.H"
 PUTFILE "vgm_botb/BotB 1643 flashbob - I can haz d00ty caiclz plz.raw.exo", "V.H", 0
-PRINT "V.I"
 PUTFILE "vgm_botb/BotB 1819 Kulor - Snofer Apostrophy S Infiltration Mission.raw.exo", "V.I", 0
-PRINT "V.J"
 PUTFILE "vgm_botb/BotB 2310 chunter - overcast.raw.exo", "V.J", 0
-PRINT "V.K"
 PUTFILE "vgm_botb/BotB 5106 null1024 - iNTeNSiTY.raw.exo", "V.K", 0
-PRINT "V.L"
 PUTFILE "vgm_botb/BotB 5135 b00daw - kill chipsters on sight!.raw.exo", "V.L", 0
-PRINT "V.M"
 PUTFILE "vgm_botb/BotB 5181 Kulor - Nintendo Entertainment Samba.raw.exo", "V.M", 0
-PRINT "V.NN"
-PUTFILE "vgm_botb/BotB 7637 happyfuntimes.raw.exo", "V.NN", 0	; V.N fails for some wierd reason - must be prev NOTES file?
-PRINT "V.O"
+PUTFILE "vgm_botb/BotB 7637 happyfuntimes.raw.exo", "V.N", 0
 PUTFILE "vgm_botb/BotB 8493 null1024 - pinky plinky thingy.raw.exo", "V.O", 0
-PRINT "V.P"
 PUTFILE "vgm_botb/BotB 9302 reg.raw.exo", "V.P", 0
-PRINT "V.Q"
 PUTFILE "vgm_botb/BotB 10995 masks revenge.raw.exo", "V.Q", 0
-PRINT "V.R"
 PUTFILE "vgm_botb/BotB 10996 gost haus.raw.exo", "V.R", 0
-PRINT "V.S"
 PUTFILE "vgm_botb/BotB 11925 Interrobang Pie - Adrenaline Lift.raw.exo", "V.S", 0
-PRINT "V.T"
 PUTFILE "vgm_botb/BotB 12143 DimWiddy - The Long Goodbye.raw.exo", "V.T", 0
-PRINT "V.U"
 PUTFILE "vgm_botb/BotB 14648 chilled out princess.raw.exo", "V.U", 0
-PRINT "V.V"
 PUTFILE "vgm_botb/BotB 16712 stewboy - The Circus is in Town.raw.exo", "V.V", 0
-PRINT "V.W"
 PUTFILE "vgm_botb/BotB 16439 Chip Champion - frozen dancehall of the pharaoh.raw.exo", "V.W", 0
-PRINT "V.X"
 PUTFILE "vgm_botb/BotB 20609 Jredd - PSG Strut.raw.exo", "V.X", 0
-PRINT "V.Y"
 PUTFILE "vgm_botb/my_mission.raw.exo", "V.Y", 0
-PRINT "V.Z"
 PUTFILE "vgm_botb/my_new_used_car.raw.exo", "V.Z", 0
-PRINT "V.ZZ"
 PUTFILE "vgm_botb/run_under_fire.raw.exo", "V.ZZ", 0
 
 
