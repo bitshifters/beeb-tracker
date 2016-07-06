@@ -8,9 +8,13 @@
 
 .tracker_main
 {
+
 	\\ Debounce
 	LDA #&FF
 	STA menu_key_held
+	
+	\\ Present intro screen
+	JSR show_intro
 	
 	\\ Install the menu data
 	JSR load_menu_data
@@ -607,7 +611,6 @@
 	LDA #LO(menu_data_filename)
 	STA osfile_params + 0
 	LDA #HI(menu_data_filename)
-	ADC #0
 	STA osfile_params + 1
 
 	LDA #LO(menu_data_start)
@@ -623,6 +626,45 @@
 	LDY #HI(osfile_params)
 	LDA #&FF
 	JSR osfile
+	RTS
+}
+
+\\ *** Show loading screen ***
+.show_intro
+{
+;	\\ Set osfile param block
+;	LDA #LO(loadscreen_data_filename)
+;	STA osfile_params + 0
+;	LDA #HI(loadscreen_data_filename)
+;	STA osfile_params + 1
+
+;	LDA #LO(VGM_stream_data)
+;	STA osfile_params + 2
+;	LDA #HI(VGM_stream_data)
+;	STA osfile_params + 3
+
+;	LDA #0
+;	STA osfile_params + 6
+
+;	\\ Issue osfile call
+;	LDX #LO(osfile_params)
+;	LDY #HI(osfile_params)
+;	LDA #&FF
+;	JSR osfile
+	
+	\\ Initialize compressed data stream
+	LDX #LO(VGM_stream_data)
+	LDY #HI(VGM_stream_data)
+	JSR exo_init_decruncher
+	
+	\\ unpack to screen
+	LDX #&00
+	LDY #&7c
+	JSR exo_unpack
+
+	
+	
+	JSR &FFE0
 	RTS
 }
 

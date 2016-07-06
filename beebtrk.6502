@@ -54,8 +54,10 @@ INCLUDE "lib/beebtracker.h.6502"
 \ *	Start address to be saved
 \ ******************************************************************
 
-ORG CODE_ORIGIN						; code origin - assume standard BBC Micro
-GUARD MODE7_base_addr				; ensure code size doesn't hit start of screen memory
+LARGEST_VGM_SIZE = 20837
+
+ORG CODE_ORIGIN								; code origin - assume standard BBC Micro
+GUARD MODE7_base_addr-LARGEST_VGM_SIZE		; ensure code size plus size of largest VGM file doesn't hit start of screen memory
 
 .start
 
@@ -92,6 +94,8 @@ INCLUDE "lib/beebtracker.s.6502"
 	CLI
 
 
+	
+
 	JSR	tracker_main
 	
 \\ ***** Exit app entirely ***** \\
@@ -119,15 +123,29 @@ INCLUDE "lib/beebtracker.s.6502"
 .data_start
 
 
-.menu_data_filename EQUS "BeebDat", 13
+.menu_data_filename 		EQUS "BeebDat", 13
+.loadscreen_data_filename 	EQUS "LSCREEN", 13
 
+\\ Need to put this macro last as I don't know how to undo the character map!
+\\ 
+SET_TELETEXT_FONT_CHAR_MAP
 
+\\ Scrolltext messages stored as font glyph byte offsets
+.scrolltext_start
 
-\ ******************************************************************
-\ *	End address to be saved
-\ ******************************************************************
+.demo_message
+EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other platforms to work on your 4Mhz BBC Micro and replayed on your SN76489 programmable sound chip! " ;You've never heard chip tunes like this before! This production was brought to you by Kieran and Scrubbly            ", 0
 
-.end
+.load_message
+EQUS "Loading... ", 0
+
+\\ ** ANY EQUS LINES AFTER THIS POINT WILL STILL CONTAIN REMAPPED CHARACTERS ** \\
+
+.scrolltext_end
+
+\\ Clear character mappings
+RESET_MAPCHAR
+
 
 
 
@@ -139,10 +157,16 @@ INCLUDE "lib/beebtracker.s.6502"
 
 .VGM_stream_data
 \\ Now loaded at run-time so don't know end of data!
+INCBIN "data/loader_volume1.bin.exo"
 
 
+\ ******************************************************************
+\ *	End address to be saved
+\ ******************************************************************
 
-ORG &0808
+.end
+
+ORG &0900
 GUARD &0CFF
 
 .menu_data_start
@@ -222,22 +246,7 @@ EQUS "Exit                            "
 ENDIF
 .menu_entries_end
 
-\\ Need to put this macro last as I don't know how to undo the character map!
-\\ 
-SET_TELETEXT_FONT_CHAR_MAP
 
-\\ Scrolltext messages stored as font glyph byte offsets
-.scrolltext_start
-
-.demo_message
-EQUS "BeebTracker scrolltext in the right place and now scrolled one pixel per frame. Looks pretty smooth! 0123456789?!. ", 0
-
-.load_message
-EQUS "Loading... ", 0
-
-\\ ** ANY EQUS LINES AFTER THIS POINT WILL STILL CONTAIN REMAPPED CHARACTERS ** \\
-
-.scrolltext_end
 
 .menu_data_end
 
@@ -282,7 +291,7 @@ PRINT "------------------------------------------------------------"
 \ ******************************************************************
 
 
-SAVE "BeebTrk", start, end, main
+SAVE "!Boot", start, end, main
 SAVE "BeebDat", menu_data_start, menu_data_end
 
 PUTFILE "vgm_botb/BotB 7832 MasterTracker.raw.exo", "V.0", 0
@@ -312,7 +321,7 @@ PUTFILE "vgm_botb/BotB 20609 Jredd - PSG Strut.raw.exo", "V.O", 0
 PUTFILE "vgm_botb/my_mission.raw.exo", "V.P", 0
 PUTFILE "vgm_botb/my_new_used_car.raw.exo", "V.Q", 0
 PUTFILE "vgm_botb/run_under_fire.raw.exo", "V.R", 0
-
+;PUTFILE "data/loader_volume1.bin", "LSCREEN", 0
 
 
 
