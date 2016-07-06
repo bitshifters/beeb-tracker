@@ -32,23 +32,26 @@
 ; flag will just mess things up.
 .exo_get_crunched_byte
 {
-	INC _byte_lo
-	bne _byte_skip_hi
-	INC _byte_hi			; forward decrunch
-._byte_skip_hi:
 
 ._byte
 	lda &ffff ; EXO data stream address	; **SELF-MODIFIED CODE**
 _byte_lo = _byte + 1
 _byte_hi = _byte + 2
+
+	\\ advance input stream memory address
+	INC _byte_lo
+	bne _byte_skip_hi
+	INC _byte_hi			; forward decrunch
+._byte_skip_hi:
+
 	rts						; decrunch_file is called.
 }
 
 ; -------------------------------------------------------------------
 
 
-EXO_crunch_byte_lo = exo_get_crunched_byte + 9
-EXO_crunch_byte_hi = exo_get_crunched_byte + 10
+EXO_crunch_byte_lo = exo_get_crunched_byte + 1
+EXO_crunch_byte_hi = exo_get_crunched_byte + 2
 
 
 

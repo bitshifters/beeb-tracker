@@ -118,8 +118,8 @@ INCLUDE "lib/beebtracker.s.6502"
 	\\ Initialize compressed data stream
 	\\ the title screen is an included binary at the VGM_stream_data memory address
 	\\ (later overwritten by loaded VGMs)
-	LDX #LO(VGM_stream_data-1)
-	LDY #HI(VGM_stream_data-1)
+	LDX #LO(VGM_stream_data)
+	LDY #HI(VGM_stream_data)
 	JSR exo_init_decruncher
 	
 	\\ unpack to screen

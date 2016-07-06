@@ -473,8 +473,8 @@
 
 	\\ Initialise music player - pass in VGM_stream_data address
 	\\ parses header from stream
-	LDX #LO(VGM_stream_data - 1)
-	LDY #HI(VGM_stream_data - 1)
+	LDX #LO(VGM_stream_data)
+	LDY #HI(VGM_stream_data)
 	JSR	vgm_init_stream
 
 	\\ Copy meta data to screen
