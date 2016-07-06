@@ -156,6 +156,7 @@ RESET_MAPCHAR
 \ ******************************************************************
 
 .VGM_stream_data
+
 \\ Now loaded at run-time so don't know end of data!
 INCBIN "data/loader_volume1.bin.exo"
 
@@ -321,7 +322,7 @@ PUTFILE "vgm_botb/BotB 20609 Jredd - PSG Strut.raw.exo", "V.O", 0
 PUTFILE "vgm_botb/my_mission.raw.exo", "V.P", 0
 PUTFILE "vgm_botb/my_new_used_car.raw.exo", "V.Q", 0
 PUTFILE "vgm_botb/run_under_fire.raw.exo", "V.R", 0
-;PUTFILE "data/loader_volume1.bin", "LSCREEN", 0
+;PUTFILE "data/loader_volume1.bin", "Z", 0
 
 
 

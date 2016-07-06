@@ -653,8 +653,8 @@
 ;	JSR osfile
 	
 	\\ Initialize compressed data stream
-	LDX #LO(VGM_stream_data)
-	LDY #HI(VGM_stream_data)
+	LDX #LO(VGM_stream_data-1)
+	LDY #HI(VGM_stream_data-1)
 	JSR exo_init_decruncher
 	
 	\\ unpack to screen
