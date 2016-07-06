@@ -93,9 +93,10 @@ INCLUDE "lib/beebtracker.s.6502"
 	LDA #32: STA &FE01
 	CLI
 
-
+	\\ Present intro screen
+	JSR show_intro
 	
-
+	\\ Run the tracker demo
 	JSR	tracker_main
 	
 \\ ***** Exit app entirely ***** \\
@@ -111,6 +112,26 @@ INCLUDE "lib/beebtracker.s.6502"
 	RTS
 }
 
+\\ *** Show loading screen ***
+.show_intro
+{
+	\\ Initialize compressed data stream
+	\\ the title screen is an included binary at the VGM_stream_data memory address
+	\\ (later overwritten by loaded VGMs)
+	LDX #LO(VGM_stream_data-1)
+	LDY #HI(VGM_stream_data-1)
+	JSR exo_init_decruncher
+	
+	\\ unpack to screen
+	LDX #&00
+	LDY #&7c
+	JSR exo_unpack
+
+	
+	\\ wait for keypress
+	JSR &FFE0
+	RTS
+}
 
 
 .code_end
