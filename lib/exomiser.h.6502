@@ -8,6 +8,8 @@
 \\ Plus ZP vars
 \\ Exomiser decruncher routine installs empty NMI handler at &0d00
 
+\\ Compress data using:
+\\ exomizer.exe raw -c -m 1024 <file.raw> -o <file.exo>
 
 \ ******************************************************************
 \ *	Space reserved for runtime buffers not preinitialised

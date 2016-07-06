@@ -6,6 +6,26 @@
 .exo_start
 
 ; -------------------------------------------------------------------
+; Unpack a compressed data stream previously initialized by exo_init_decruncher
+; to the memory address specified in X,Y
+.exo_unpack
+{
+	STX write_chr+1
+	STY write_chr+2
+
+	.next_chr
+	JSR exo_get_decrunched_byte
+	BCS all_done
+	.write_chr	STA &ffff				; **SELF-MODIFIED**
+	INC write_chr+1
+	BNE next_chr
+	INC write_chr+2
+	BNE next_chr
+	.all_done
+	RTS
+}
+
+; -------------------------------------------------------------------
 ; Fetch byte from an exomiser compressed data stream
 ; for this exo_get_crunched_byte routine to work the crunched data has to be
 ; crunced using the -m <buffersize> and possibly the -l flags. Any other
@@ -37,6 +57,7 @@ EXO_crunch_byte_hi = exo_get_crunched_byte + 10
 ; zero page locations and the decrunch tables
 ; no constraints on register content, however the
 ; decimal flag has to be #0 (it almost always is, otherwise do a cld)
+; X/Y contains address of EXO crunched data stream
 ; -------------------------------------------------------------------
 .exo_init_decruncher				; pass in address of (crunched data-1) in X,Y
 {
