@@ -55,7 +55,7 @@ INCLUDE "lib/beebtracker.h.6502"
 \ *	Start address to be saved
 \ ******************************************************************
 
-LARGEST_VGM_SIZE = 20560
+LARGEST_VGM_SIZE = 20560 - 266				; less size of splash screen "loader_volume2.bin.exo"
 
 ORG CODE_ORIGIN								; code origin - assume standard BBC Micro
 GUARD MODE7_base_addr-LARGEST_VGM_SIZE		; ensure code size plus size of largest VGM file doesn't hit start of screen memory

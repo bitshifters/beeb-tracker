@@ -95,9 +95,11 @@ META_duration_addr = MODE7_base_addr + 6 * MODE7_char_width + 33		; duration dis
 .readptr				SKIP 2		; generic read ptr
 
 \\ Scroll text vars
-.scr_msg_idx			SKIP 1		; index into scr_message
 .scr_col				SKIP 1		; current column in first character to be displayed
-.scr_y					SKIP 1		; y coordinate of scroll text
+.scr_msg_ptr			SKIP 2		; ptr to current char in our scrolltext msg
+.scr_msg_addr			SKIP 2		; ptr to start of scrolltext msg
+
+.tracker_scr_ptr		SKIP 2		; remember where our scrolltext ptr is to continue
 
 \\ App state vars
 .file_no				SKIP 1		; index into our file table
