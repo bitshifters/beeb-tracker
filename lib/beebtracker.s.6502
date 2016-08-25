@@ -20,6 +20,10 @@
 	LDA #0
 	STA file_no
 
+	\\ Bodge to keep scrolltext between file swaps
+	LDA #LO(demo_message): LDX #HI(demo_message)
+	STA tracker_scr_ptr
+	STX tracker_scr_ptr+1
 
 	\\ Intro screen goes here \\
 
@@ -470,6 +474,10 @@
 
 	LDA #LO(demo_message): LDX #HI(demo_message)
 	LDY #23: JSR init_scr				; top of scroller at Y
+	LDA tracker_scr_ptr
+	STA scr_msg_ptr
+	LDA tracker_scr_ptr+1
+	STA scr_msg_ptr+1
 
 	\\ Initialise music player - pass in VGM_stream_data address
 	\\ parses header from stream
@@ -567,6 +575,11 @@
 
 .deinit_demo
 {
+	LDA scr_msg_ptr
+	STA tracker_scr_ptr
+	LDA scr_msg_ptr+1
+	STA tracker_scr_ptr+1
+
 	\\ Unhook Event vector - stops player
 	JSR stop_eventv
 
@@ -752,21 +765,18 @@
 \ ******************************************************************
 \ *	Scrolltext code
 \ * Redraws entire message each frame
-\ * Only scrolls with byte precision, i.e. two pixels per frame
-\ * This is too fast for a 5x5 pixel font
-\ * TODO - rewrite to be single pixel scroll
+\ * Switches font set depending on which pixel we're drawing (odd or even)
 \ ******************************************************************
 
 .init_scr			; Y = y pos drawn at, A, X = address of message
 {
-	\\ Set address of message - **MODIFIES CODE**
-	STA poll_scr_msg_addr_1+1
-	STA poll_scr_msg_addr_2+1
-	STX poll_scr_msg_addr_1+2
-	STX poll_scr_msg_addr_2+2
+	\\ Set address of message
+	STA scr_msg_ptr
+	STA scr_msg_addr
+	STX scr_msg_ptr+1
+	STX scr_msg_addr+1
 
 	\\ Set address that scrolltext drawn to - **MODIFIES CODE**
-	STY scr_y
 	LDA mode7_row_addr_LO,Y
 	STA poll_scr_line_1_addr+1
 	LDA mode7_row_addr_HI,Y
@@ -778,7 +788,6 @@
 	STA poll_scr_line_2_addr+2
 
 	LDA #0
-	STA scr_msg_idx
 	STA scr_col
 
 	.return
@@ -787,6 +796,11 @@
 
 .poll_scr
 \\{
+	LDA scr_msg_ptr
+	STA poll_scr_msg_addr_1+1
+	LDA scr_msg_ptr+1
+	STA poll_scr_msg_addr_1+2
+
 	\\ Copy our temp variables for drawing
 	LDA scr_col
 	LSR A
@@ -819,7 +833,7 @@
 	ADC #0
 	STA poll_scr_font_line2_addr + 2
 
-	LDA scr_msg_idx
+	LDA #0
 	STA tmp_msg_idx				; current index into message
 
 	\\ Loop over characters in row
@@ -828,8 +842,15 @@
 
 	LDY tmp_msg_idx
 	.poll_scr_msg_addr_1
-	LDA demo_message,Y			; actually contains the offset into font data - **SELF-MODIFIED CODE**
+	LDA demo_message,Y					; actually contains the offset into font data - **SELF-MODIFIED CODE**
 	BNE poll_scr_not_end_of_msg			; finish if zero
+
+	\\ Really just want to read from start of message here 
+
+	LDA scr_msg_addr
+	STA poll_scr_msg_addr_1+1
+	LDA scr_msg_addr+1
+	STA poll_scr_msg_addr_1+2
 
 	LDY #0
 	STY tmp_msg_idx
@@ -883,13 +904,25 @@
 
 	LDA #0
 	STA scr_col					; reset column
-	INC scr_msg_idx				; next char in scr_message
 
-	LDY scr_msg_idx
+	INC scr_msg_ptr				; next char in scr_message
+	BNE poll_scr_no_carry
+	INC scr_msg_ptr+1
+	.poll_scr_no_carry
+
+	\\ Check for end of string
+
+	LDY #0
 	.poll_scr_msg_addr_2
-	LDA demo_message,Y			; **SELF-MODIFIED CODE**
+	LDA (scr_msg_ptr),Y
 	BNE poll_scr_return
-	STA scr_msg_idx
+
+	\\ Reset to start of msg
+
+	LDA scr_msg_addr
+	STA scr_msg_ptr
+	LDA scr_msg_addr+1
+	STA scr_msg_ptr+1
 
 	.poll_scr_return
 	RTS
@@ -1328,66 +1361,6 @@ ENDIF
 \ *	Tracker scrolling display
 \ ******************************************************************
 
-.write_decimal_at		; A = number, X,Y = location on MODE 7 screen
-{
-	PHA
-	LDA mode7_row_addr_LO,Y
-	STA writeptr
-	LDA mode7_row_addr_HI,Y
-	STA writeptr+1
-
-	TXA:TAY
-
-	\\ Count hundreds
-	PLA
-	LDX #0
-	.loop_100
-	CMP #100
-	BCC done_100
-	SEC
-	SBC #100
-	INX
-	JMP loop_100
-	.done_100
-	PHA
-
-	\\ Write hundreds
-	CLC
-	TXA
-	ADC #'0'
-	STA (writeptr),Y
-	INY
-	
-	\\ Count tens
-	PLA
-	LDX #0
-	.loop_10
-	CMP #10
-	BCC done_10
-	SEC
-	SBC #10
-	INX
-	JMP loop_10
-	.done_10
-	PHA
-
-	\\ Write tens
-	CLC
-	TXA
-	ADC #'0'
-	STA (writeptr),Y
-	INY
-
-	\\ Write units
-	CLC
-	PLA
-	ADC #'0'
-	STA (writeptr),Y
-
-	.return
-	RTS
-}
-
 .mode7_copy_line				; copy line X to line Y
 {
 	\\ From line X
@@ -1553,12 +1526,41 @@ ENDMACRO
 	JSR copy_channel_fields
 
 	\\ **Instead writing our live data into bottom line!**
-	\\ Write our current line number as decimal
+	\\ Write our current line number as decimal - NOW AS 16-BIT HEX
 
-	LDA vgm_player_counter
-	LDX #TRACKER_lineno_field_xpos + 1			; +1 because leading 0 is constant
-	LDY #TRACKER_bottom_line_ypos
-	JSR write_decimal_at
+	{
+		LDY #TRACKER_bottom_line_ypos
+
+		LDA mode7_row_addr_LO,Y
+		STA writeptr
+		LDA mode7_row_addr_HI,Y
+		STA writeptr+1
+
+		LDY #TRACKER_lineno_field_xpos
+
+		LDA vgm_player_counter+1
+		LSR A: LSR A: LSR A: LSR A
+		TAX
+		WRITE_VOL_CHAR
+		INY
+
+		LDA vgm_player_counter+1
+		AND #&0F
+		TAX
+		WRITE_VOL_CHAR
+		INY
+
+		LDA vgm_player_counter
+		LSR A: LSR A: LSR A: LSR A
+		TAX
+		WRITE_VOL_CHAR
+		INY
+
+		LDA vgm_player_counter
+		AND #&0F
+		TAX
+		WRITE_VOL_CHAR
+	}
 
 	\\ Can reuse writeptr here - pointing to start of line we're writing!
 	\\ Write channel values into fields - DO THIS BETTER?
