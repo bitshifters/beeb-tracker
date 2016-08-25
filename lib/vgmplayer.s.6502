@@ -194,6 +194,7 @@ ORG VGM_PLAYER_ORG
 	\\ Initialise vars
 	LDA #&FF
 	STA vgm_player_counter
+	STA vgm_player_counter+1
 
 	LDA #0
 	STA vgm_player_ended
@@ -264,6 +265,9 @@ ORG VGM_PLAYER_ORG
 	
 	.wait_20_ms
 	INC vgm_player_counter				; indicate we have completed another frame of audio
+	BNE no_carry
+	INC vgm_player_counter+1
+	.no_carry
 
 	CLC
 	RTS
@@ -275,6 +279,8 @@ ORG VGM_PLAYER_ORG
 	JSR deinit_player
 
 	INC vgm_player_counter				; indicate we have completed one last frame of audio
+	BNE _sample_end
+	INC vgm_player_counter+1
 
 	._sample_end
 	SEC

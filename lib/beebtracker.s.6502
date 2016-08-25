@@ -1361,66 +1361,6 @@ ENDIF
 \ *	Tracker scrolling display
 \ ******************************************************************
 
-.write_decimal_at		; A = number, X,Y = location on MODE 7 screen
-{
-	PHA
-	LDA mode7_row_addr_LO,Y
-	STA writeptr
-	LDA mode7_row_addr_HI,Y
-	STA writeptr+1
-
-	TXA:TAY
-
-	\\ Count hundreds
-	PLA
-	LDX #0
-	.loop_100
-	CMP #100
-	BCC done_100
-	SEC
-	SBC #100
-	INX
-	JMP loop_100
-	.done_100
-	PHA
-
-	\\ Write hundreds
-	CLC
-	TXA
-	ADC #'0'
-	STA (writeptr),Y
-	INY
-	
-	\\ Count tens
-	PLA
-	LDX #0
-	.loop_10
-	CMP #10
-	BCC done_10
-	SEC
-	SBC #10
-	INX
-	JMP loop_10
-	.done_10
-	PHA
-
-	\\ Write tens
-	CLC
-	TXA
-	ADC #'0'
-	STA (writeptr),Y
-	INY
-
-	\\ Write units
-	CLC
-	PLA
-	ADC #'0'
-	STA (writeptr),Y
-
-	.return
-	RTS
-}
-
 .mode7_copy_line				; copy line X to line Y
 {
 	\\ From line X
@@ -1586,12 +1526,41 @@ ENDMACRO
 	JSR copy_channel_fields
 
 	\\ **Instead writing our live data into bottom line!**
-	\\ Write our current line number as decimal
+	\\ Write our current line number as decimal - NOW AS 16-BIT HEX
 
-	LDA vgm_player_counter
-	LDX #TRACKER_lineno_field_xpos + 1			; +1 because leading 0 is constant
-	LDY #TRACKER_bottom_line_ypos
-	JSR write_decimal_at
+	{
+		LDY #TRACKER_bottom_line_ypos
+
+		LDA mode7_row_addr_LO,Y
+		STA writeptr
+		LDA mode7_row_addr_HI,Y
+		STA writeptr+1
+
+		LDY #TRACKER_lineno_field_xpos
+
+		LDA vgm_player_counter+1
+		LSR A: LSR A: LSR A: LSR A
+		TAX
+		WRITE_VOL_CHAR
+		INY
+
+		LDA vgm_player_counter+1
+		AND #&0F
+		TAX
+		WRITE_VOL_CHAR
+		INY
+
+		LDA vgm_player_counter
+		LSR A: LSR A: LSR A: LSR A
+		TAX
+		WRITE_VOL_CHAR
+		INY
+
+		LDA vgm_player_counter
+		AND #&0F
+		TAX
+		WRITE_VOL_CHAR
+	}
 
 	\\ Can reuse writeptr here - pointing to start of line we're writing!
 	\\ Write channel values into fields - DO THIS BETTER?
