@@ -155,7 +155,14 @@ SET_TELETEXT_FONT_CHAR_MAP
 .scrolltext_start
 
 .demo_message
-EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other 8 bit platforms to work on your BBC Micro. They have been retuned to 4Mhz so can be played on your SN76489 sound chip! You have never heard chip tunes like this before on the Beeb and not an ENVELOPE in sight! This production was brought to you by Kieran and Scrubbly. Press Escape to bring up the menu, use the up and down arrow keys and return to select a new track. Find the full source to this demo and more at bitshifters.github.io. Join the Collective!            ", 0
+EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other platforms to work on your BBC Micro 4MHz SN76489 sound chip! Find us at bitshifters.github.io. "
+EQUB 0
+
+\\ Long text blows out the 200KB disk size - doh!
+;EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other 8 bit platforms to work on your BBC Micro. They have been retuned to 4Mhz so can be played on "
+;EQUS "your SN76489 sound chip! You have never heard chip tunes like this before on the Beeb and not an ENVELOPE in sight! This production was brought to you by Kieran and Scrubbly. Press Escape to bring up the menu. Use the up and down arrow keys and return to "
+;EQUS "select a new track. Find the full source to this demo and more at bitshifters.github.io. Join the Collective!            "
+;EQUB 0
 
 .load_message
 EQUS "Loading... ", 0
