@@ -540,6 +540,18 @@
 	BNE div_loop
 	
 	\\ A contains remainder but we discard as we dont need accuracy
+	\\ Actually if we ignore it the line moves too fast for very short tunes and overruns the end of the bar
+
+	CMP #FX_playtime_width*2/3
+	BCC no_round_up
+
+	\\ Remainder over half of our divisor so round up
+
+	INC playtime_interval
+	BNE no_round_up
+	INC playtime_interval+1
+
+	.no_round_up
 	\\ playtime_interval now contains # of 50Hz updates before playtime_index should be incremented
 	LDA #0
 	STA playtime_index
@@ -1192,6 +1204,10 @@ ENDIF
 	BPL loop2
 	
 	\\ Update playtime bar
+
+	LDA vgm_player_ended			; unless player has ended
+	BNE not_yet
+
 	INC playtime_counter
 	BNE no_hi
 	INC playtime_counter+1
@@ -1233,7 +1249,8 @@ ENDIF
 	
 	
 	
-	\\ Update meta data
+	\\ Update meta data - but not if we've finished the track
+
 	{
 		DEC meta_timer
 		BNE done_meta
@@ -1316,6 +1333,10 @@ ENDIF
 	}
 
 	\\ Increment counter for clock
+
+	LDA vgm_player_ended
+	BNE return							; but not if player has finished
+
 	{
 		INC meta_poll_count
 		LDA meta_poll_count
