@@ -31,7 +31,7 @@ COMPILE_OPTION_EXIT = FALSE			; enable "Exit" in selection menu
 \ ******************************************************************
 
 \\ Number of entries in our file table
-NUM_vgm_files = 27
+NUM_vgm_files = 26
 
 
 \ ******************************************************************
@@ -155,14 +155,15 @@ SET_TELETEXT_FONT_CHAR_MAP
 .scrolltext_start
 
 .demo_message
-EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other platforms to work on your BBC Micro 4MHz SN76489 sound chip! Find us at bitshifters.github.io. "
-EQUB 0
-
-\\ Long text blows out the 200KB disk size - doh!
-;EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other 8 bit platforms to work on your BBC Micro. They have been retuned to 4Mhz so can be played on "
-;EQUS "your SN76489 sound chip! You have never heard chip tunes like this before on the Beeb and not an ENVELOPE in sight! This production was brought to you by Kieran and Scrubbly. Press Escape to bring up the menu. Use the up and down arrow keys and return to "
-;EQUS "select a new track. Find the full source to this demo and more at bitshifters.github.io. Join the Collective!            "
+\\ Short message (<256 bytes)
+;EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 27 awesome VGM chiptune music files that have been converted from other platforms to work on your BBC Micro 4MHz SN76489 sound chip! Find us at bitshifters.github.io. "
 ;EQUB 0
+
+\\ Long text blows out the 200KB disk size - removed one tune
+EQUS "            Welcome to the Bitshifters Battle of the Bits BeebTracker Demo... Showcasing 26 awesome VGM chiptune music files converted from other 8 bit platforms to work on your BBC Micro. They have been retuned to 4Mhz and resampled at 50Hz"
+EQUS " so can be played back on your SN76489 sound chip. You have never heard chiptunes like this before on the Beeb and not an ENVELOPE in sight! Press Escape to bring up the menu. Use the up and down arrow keys and return to select a new track."
+EQUS " Released at the ABUG South Meet Up in Cambridge on 27 August 2016. This production was brought to you by Kieran and Scrubbly. Find the full source to this demo and more at bitshifters.github.io. Come join the Collective...!    "
+EQUB 0
 
 .load_message
 EQUS "Loading... ", 0
@@ -217,7 +218,9 @@ EQUS "V.7", 13
 EQUS "V.8", 13
 EQUS "V.9", 13
 EQUS "V.A", 13
-EQUS "V.C", 13
+\\ *** Removed
+\\ EQUS "V.C", 13
+\\ ***
 EQUS "V.D", 13
 EQUS "V.E", 13
 EQUS "V.F", 13
@@ -253,22 +256,24 @@ EQUS " 8. I Can Haz D00ty             "
 EQUS " 9. Infiltration Mission        "
 EQUS "10. Overcast                    "
 EQUS "11. iNTeNSiTY                   "
-EQUS "12. Kill Chipsters on Sight!    "
-EQUS "13. Nintendo Entertainment Samba"
-EQUS "14. Happy Fun Times             "
-EQUS "15. Pinky Plinky Thingy         "
-EQUS "16. Reg                         "
-EQUS "17. Masks Revenge               "
-EQUS "18. Gost Haus                   "
-EQUS "19. Adrenaline Lift             "
-EQUS "20. The Long Goodbye            "
-EQUS "21. Chilled Out Princess        "
-EQUS "22. The Circus Is In Town       "
-EQUS "23. Frozen Dancehall o/t Pharoah"
-EQUS "24. PSG Strut                   "
-EQUS "25. My Mission                  "
-EQUS "26. My New Used Car             "
-EQUS "27. Run Under Fire              "
+\\ *** Removed
+\\ EQUS "12. Kill Chipsters on Sight!    "
+\\ ***
+EQUS "12. Nintendo Entertainment Samba"
+EQUS "13. Happy Fun Times             "
+EQUS "14. Pinky Plinky Thingy         "
+EQUS "15. Reg                         "
+EQUS "16. Masks Revenge               "
+EQUS "17. Gost Haus                   "
+EQUS "18. Adrenaline Lift             "
+EQUS "19. The Long Goodbye            "
+EQUS "20. Chilled Out Princess        "
+EQUS "21. The Circus Is In Town       "
+EQUS "22. Frozen Dancehall o/t Pharoah"
+EQUS "23. PSG Strut                   "
+EQUS "24. My Mission                  "
+EQUS "25. My New Used Car             "
+EQUS "26. Run Under Fire              "
 
 IF COMPILE_OPTION_EXIT
 EQUS "Exit                            "
@@ -334,7 +339,11 @@ PUTFILE "vgm_botb/BotB 1643 flashbob - I can haz d00ty caiclz plz.raw.exo", "V.7
 PUTFILE "vgm_botb/BotB 1819 Kulor - Snofer Apostrophy S Infiltration Mission.raw.exo", "V.8", 0
 PUTFILE "vgm_botb/BotB 2310 chunter - overcast.raw.exo", "V.9", 0
 PUTFILE "vgm_botb/BotB 5106 null1024 - iNTeNSiTY.raw.exo", "V.A", 0
-PUTFILE "vgm_botb/BotB 5135 b00daw - kill chipsters on sight!.raw.exo", "V.C", 0
+
+\\ Removed this tune as we need disk space for text and this sounds harsh on the ears!
+\\ PUTFILE "vgm_botb/BotB 5135 b00daw - kill chipsters on sight!.raw.exo", "V.C", 0
+\\ ***
+
 PUTFILE "vgm_botb/BotB 5181 Kulor - Nintendo Entertainment Samba.raw.exo", "V.D", 0
 PUTFILE "vgm_botb/BotB 7637 happyfuntimes.raw.exo", "V.E", 0
 PUTFILE "vgm_botb/BotB 8493 null1024 - pinky plinky thingy.raw.exo", "V.F", 0
@@ -351,7 +360,7 @@ PUTFILE "vgm_botb/my_mission.raw.exo", "V.P", 0
 PUTFILE "vgm_botb/my_new_used_car.raw.exo", "V.Q", 0
 PUTFILE "vgm_botb/run_under_fire.raw.exo", "V.R", 0
 
-
+PUTFILE "beebtrk.md", "README", 0
 
 
 IF _DEBUG			; only needed for debug purposes
