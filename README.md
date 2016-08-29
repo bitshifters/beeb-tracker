@@ -28,3 +28,5 @@ For further information see: https://github.com/scrubbly/vgm-converter
 * Requires BeebASM: https://github.com/tom-seddon/beebasm
 * Run make.bat on a Windows machine to compile the demos
 
+## Credits
+* Uses the amazing Exomizer compressor: http://hem.bredband.net/magli143/exo/
