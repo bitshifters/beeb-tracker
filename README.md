@@ -9,7 +9,7 @@ A Bitshifers Production for the 8-bit 6502 BBC Micro
 * Two demo disks showcasing what the SN76849 is capable of
 
 ## Demo Disk Volume 1
-Contains 27 'Battle of the Bits' VGM music files. 
+Contains 26 'Battle of the Bits' VGM music files. 
 
 ## Demo Disk Volume 2
 Contains 17 Sega Master System 'Ninja Gaiden' VGM music files.
