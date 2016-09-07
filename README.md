@@ -21,7 +21,7 @@ All of the VGM files were ported to BBC Micro using a conversion script that tra
 
 Since VGM is a verbose format, the VGM files in the demos were exported from the same script in a compact raw binary format, and then compressed using Exomiser to enable them to be loaded into the limited RAM of a BBC Micro.
 
-For further information see: https://github.com/scrubbly/vgm-converter
+For further information see: https://github.com/simondotm/vgm-converter
 
 ## Build Instructions
 * Compiled SSD files are included in the repo
