@@ -253,7 +253,7 @@ SET_TELETEXT_FONT_CHAR_MAP
 .demo_message
 EQUS "            Welcome to the Bitshifters Ninja Gaiden BeebTracker Demo... 17 awesome VGM chiptune music files ported from Sega Master System to your BBC Micro. They have been retuned to 4Mhz and resampled at 50Hz"
 EQUS " so can be played back on your SN76489 sound chip. Enjoy the soundtrack! Press Escape to bring up the menu. Use the up and down arrow keys and return to select a new track."
-EQUS " Released at the ABUG South Meet Up in Cambridge on 27 August 2016. This production was brought to you by Kieran and Scrubbly. Find the full source to this demo and more at bitshifters.github.io. Come join the Collective...!    "
+EQUS " Released at the ABUG South Meet Up in Cambridge on 27 August 2016. This production was brought to you by Kieran and Henley. Find the full source to this demo and more at bitshifters.github.io. Come join the Collective...!    "
 EQUB 0
 
 .load_message
