@@ -1,0 +1,81 @@
+{
+    "version": "0.1.0",
+    "command": "cmd",
+    "isShellCommand": true,
+    "showOutput": "always",
+    "echoCommand": true,
+    "suppressTaskName": true,
+    "args": [
+        "/C"
+    ],
+    "tasks": [
+        {
+            "taskName": "beebtrk.ssd",
+            "problemMatcher": {
+                "owner": "6502",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            },
+            "args": [
+                "BeebAsm.exe -v -i beebtrk.6502 -do beebtrk.ssd -opt 2"
+            ]
+        },
+        {
+            "taskName": "Run 'beebtrk3.ssd' in Emulator",
+            "isTestCommand": true,
+            "args": [
+                "BeebEm.exe beebtrk3.ssd"
+            ]
+        },
+        {
+            "taskName": "beebtrk2.ssd",
+            "problemMatcher": {
+                "owner": "6502",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            },
+            "args": [
+                "BeebAsm.exe -v -i beebtrk2.6502 -do beebtrk2.ssd -opt 2"
+            ]
+        },
+        {
+            "taskName": "beebtrk3.ssd",
+            "problemMatcher": {
+                "owner": "6502",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            },
+            "args": [
+                "BeebAsm.exe -v -i beebtrk3.6502 -do beebtrk3.ssd -opt 2"
+            ],
+            "isBuildCommand": true
+        }
+    ]
+}
