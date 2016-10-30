@@ -128,8 +128,8 @@ INCLUDE "lib/beebtracker.s.6502"
 	JSR exo_unpack
 
 	
-	\\ wait for keypress
-	JSR &FFE0
+	\\ wait for keypress within 2 secs
+    LDA#&81:LDX#200:LDY#0:JSR osbyte
 	RTS
 }
 

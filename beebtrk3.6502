@@ -134,6 +134,10 @@ INCLUDE "lib/beebtracker.s.6502"
 \\ *** Show loading screen ***
 .show_intro
 {
+    LDA#&81:LDX#100:LDY#0:JSR osbyte	
+	LDA #19:LDX #0:JSR osbyte
+	SEI:LDA #6:STA &FE00:LDA #0:STA &FE01:CLI
+
 	\\ Initialize compressed data stream
 	\\ the title screen is an included binary at the VGM_stream_data memory address
 	\\ (later overwritten by loaded VGMs)
@@ -146,9 +150,13 @@ INCLUDE "lib/beebtracker.s.6502"
 	LDY #&7c
 	JSR exo_unpack
 
+
+
+	LDA #19:LDX #0:JSR osbyte
+	LDA #6:STA &FE00:LDA #25:STA &FE01	
 	
-	\\ wait for keypress
-	JSR &FFE0
+	\\ wait for keypress within 2 secs
+    LDA#&81:LDX#200:LDY#0:JSR osbyte
 	RTS
 }
 
@@ -157,8 +165,7 @@ TITLE_LOAD_ADDRESS = &8000 - 3022 ; length of compressed title screen
 {
 \\ conceal vram while we load & unpack
 	SEI
-	LDA #1: STA &FE00
-	LDA #0: STA &FE01
+	LDA #6:STA &FE00:LDA #0:STA &FE01
 	CLI	
 
 	\\ Set osfile param block
@@ -190,22 +197,64 @@ TITLE_LOAD_ADDRESS = &8000 - 3022 ; length of compressed title screen
 	\\ unpack to screen
 	LDX #&00
 	LDY #&30
-	JSR exo_unpack
+	JSR fancy_exo_unpack ;exo_unpack
 
-\\ reveal vram at vsync	
-	LDA #19
-	LDX #0
-	JSR osbyte
+
+	\\ wait for keypress within 5 secs
+    LDA#&81:LDX#0:LDY#2:JSR osbyte
+
 	
-	SEI
-	LDA #1: STA &FE00
-	LDA #80: STA &FE01
-	CLI	
-	
-	\\ wait for keypress
-	JSR &FFE0
+	LDA #19:LDX #0:JSR osbyte
+	LDA #6:STA &FE00:LDA #0:STA &FE01	
+	JSR clear_vram	
 	RTS
 }
+
+; -------------------------------------------------------------------
+
+.fancy_exo_unpack
+{
+	STX write_chr+1
+	STY write_chr+2
+
+	LDA #0:STA linereveal
+
+	.next_chr
+	INC bytecounter+0
+	BNE skiphi
+	INC bytecounter+1
+	.skiphi
+	LDA bytecounter+1
+	CMP #HI(640)
+	BNE notyet
+	LDA bytecounter+0
+	CMP #LO(640)
+	BNE notyet
+
+	INC linereveal
+	LDA #19:JSR osbyte
+	LDA #6:STA &FE00:LDA linereveal:STA &FE01	
+	LDA #0:STA bytecounter:STA bytecounter+1
+
+	.notyet
+
+	JSR exo_get_decrunched_byte
+	BCS all_done
+	.write_chr	STA &ffff				; **SELF-MODIFIED**
+	INC write_chr+1
+	BNE next_chr
+	INC write_chr+2
+	BNE next_chr
+
+	.all_done
+
+	LDA #6:STA &FE00:LDA #32:STA &FE01
+	RTS
+
+	.linereveal EQUB 0
+	.bytecounter EQUW 0
+}
+
 
 \\ reset all memory from &3000 to &8000 to zero
 \\ hides unsightly mode switches
