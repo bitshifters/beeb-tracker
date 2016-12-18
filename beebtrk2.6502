@@ -55,10 +55,11 @@ INCLUDE "lib/beebtracker.h.6502"
 \ *	Start address to be saved
 \ ******************************************************************
 
-LARGEST_VGM_SIZE = 20560 - 266				; less size of splash screen "loader_volume2.bin.exo"
+LARGEST_VGM_SIZE = 20560				; less size of splash screen "loader_volume2.bin.exo"
+SPLASH_SCREEN_SIZE = 266
 
 ORG CODE_ORIGIN								; code origin - assume standard BBC Micro
-GUARD MODE7_base_addr-LARGEST_VGM_SIZE		; ensure code size plus size of largest VGM file doesn't hit start of screen memory
+GUARD MODE7_base_addr-LARGEST_VGM_SIZE+SPLASH_SCREEN_SIZE		; ensure code size plus size of largest VGM file doesn't hit start of screen memory
 
 .start
 
@@ -296,9 +297,9 @@ SET_TELETEXT_FONT_CHAR_MAP
 .scrolltext_start
 
 .demo_message
-EQUS "            Welcome to the Bitshifters Ninja Gaiden BeebTracker Demo... 17 awesome VGM chiptune music files ported from Sega Master System to your BBC Micro. They have been retuned to 4Mhz and resampled at 50Hz"
-EQUS " so can be played back on your SN76489 sound chip. Enjoy the soundtrack! Press Escape to bring up the menu. Use the up and down arrow keys and return to select a new track."
-EQUS " Released at the ABUG South Meet Up in Cambridge on 27 August 2016. This production was brought to you by Kieran and Henley. Find the full source to this demo and more at bitshifters.github.io. Come join the Collective...!    "
+EQUS "            Welcome to the Bitshifters Ninja Gaiden BeebTracker Demo... 17 awesome VGM chiptunes ported from the Sega Master System to your BBC Micro. Retuned to 4Mhz and resampled at 50Hz"
+EQUS " to play back on your SN76489 sound chip. Enjoy the soundtrack! Press Escape to bring up the menu. Use the up and down arrow keys and return to select a new track."
+EQUS " Released at the ABUG South Meet Up in Cambridge on 27 August 2016. This production was brought to you by Kieran and Henley. Find the full source to this demo and more at bitshifters.github.io. Come join the Collective...!"
 EQUB 0
 
 .load_message
@@ -312,6 +313,12 @@ EQUS "Loading... ", 0
 RESET_MAPCHAR
 
 
+\\ ** MOVED EXO SCRATCH SPACE HERE TO AVOID NMI AT PAGE &D00 ** \\
+.exo_tabl_bi
+PRINT "Spare bytes=",(MODE7_base_addr-LARGEST_VGM_SIZE)-exo_tabl_bi
+SKIP EXO_TABL_SIZE
+exo_tabl_lo = exo_tabl_bi + 52
+exo_tabl_hi = exo_tabl_bi + 104
 
 
 \ ******************************************************************

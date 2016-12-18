@@ -55,10 +55,11 @@ INCLUDE "lib/beebtracker.h.6502"
 \ *	Start address to be saved
 \ ******************************************************************
 
-LARGEST_VGM_SIZE = 13249 - 266				; less size of splash screen "loader_volume2.bin.exo"
+LARGEST_VGM_SIZE = 13249				; less size of splash screen "loader_volume3.bin.exo"
+SPLASH_SCREEN_SIZE = 259
 
 ORG CODE_ORIGIN								; code origin - assume standard BBC Micro
-GUARD MODE7_base_addr-LARGEST_VGM_SIZE		; ensure code size plus size of largest VGM file doesn't hit start of screen memory
+GUARD MODE7_base_addr-LARGEST_VGM_SIZE+SPLASH_SCREEN_SIZE		; ensure code size plus size of largest VGM file doesn't hit start of screen memory
 
 .start
 
@@ -318,6 +319,12 @@ EQUS "Loading... ", 0
 RESET_MAPCHAR
 
 
+\\ ** MOVED EXO SCRATCH SPACE HERE TO AVOID NMI AT PAGE &D00 ** \\
+.exo_tabl_bi
+PRINT "Spare bytes=",(MODE7_base_addr-LARGEST_VGM_SIZE)-exo_tabl_bi
+SKIP EXO_TABL_SIZE
+exo_tabl_lo = exo_tabl_bi + 52
+exo_tabl_hi = exo_tabl_bi + 104
 
 
 \ ******************************************************************
@@ -388,34 +395,34 @@ EQUS "C.E", 13
 
 .menu_entries
 EQUS " 1. Title Screen                "
-EQUS " 3. Green Hill Zone             "
-EQUS " 4. Invincible                  "
-EQUS " 5. Bridge Zone                 "
-EQUS " 7. Jungle Zone                 "
-EQUS " 8. Bonus Zone                  "
-EQUS " 9. Labyrinth Zone              "
-EQUS "10. Act Complete                "
-EQUS "11. Scrap Brain Zone            "
-EQUS "12. Sky Base Zone               "
-EQUS "13. Boss Theme                  "
-EQUS "14. Death                       "
-EQUS "15. Ending                      "
-EQUS "16. Marble Zone (Bonus)         "
+EQUS " 2. Green Hill Zone             "
+EQUS " 3. Invincible                  "
+EQUS " 4. Bridge Zone                 "
+EQUS " 5. Jungle Zone                 "
+EQUS " 6. Bonus Zone                  "
+EQUS " 7. Labyrinth Zone              "
+EQUS " 8. Act Complete                "
+EQUS " 9. Scrap Brain Zone            "
+EQUS "10. Sky Base Zone               "
+EQUS "11. Boss Theme                  "
+EQUS "12. Death                       "
+EQUS "13. Ending                      "
+EQUS "14. Marble Zone (Bonus)         "
 
-EQUS "17. Sonic Chaos Intro           "
-EQUS "18. Sonic Chaos Title Screen    "
-EQUS "19. Sonic Chaos Select Player   "
-EQUS "20. Sonic Chaos Turquoise Hill  "
-EQUS "21. Sonic Chaos Boss            "
-EQUS "22. Sonic Chaos Gigalopolis Zone"
-EQUS "23. Sonic Chaos Sleeping Egg Zn "
-EQUS "24. Sonic Chaos Special Stage   "
-EQUS "25. Sonic Chaos Mecha Green Hill"
-EQUS "26. Sonic Chaos Aqua Planet Zone"
-EQUS "27. Sonic Chaos Special Stage 2 "
-EQUS "28. Sonic Chaos Electric Egg Zn "
-EQUS "29. Sonic Chaos Final Boss      "
-EQUS "30. Sonic Chaos Ending          "
+EQUS "15. Sonic Chaos Intro           "
+EQUS "16. Sonic Chaos Title Screen    "
+EQUS "17. Sonic Chaos Select Player   "
+EQUS "18. Sonic Chaos Turquoise Hill  "
+EQUS "19. Sonic Chaos Boss            "
+EQUS "20. Sonic Chaos Gigalopolis Zone"
+EQUS "21. Sonic Chaos Sleeping Egg Zn "
+EQUS "22. Sonic Chaos Special Stage   "
+EQUS "23. Sonic Chaos Mecha Green Hill"
+EQUS "24. Sonic Chaos Aqua Planet Zone"
+EQUS "25. Sonic Chaos Special Stage 2 "
+EQUS "26. Sonic Chaos Electric Egg Zn "
+EQUS "27. Sonic Chaos Final Boss      "
+EQUS "28. Sonic Chaos Ending          "
 
 
 IF COMPILE_OPTION_EXIT
