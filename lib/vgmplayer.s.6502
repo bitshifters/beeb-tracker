@@ -5,6 +5,8 @@
 
 VGM_PLAYER_ORG = *
 
+VGM_TRIGGER_BEAT_ON_VOLUME = FALSE		; currently incompatible with memory changes (it's that tight!)
+
 ORG &0380
 GUARD &03E0
 
@@ -351,17 +353,18 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	SBC vgm_player_reg_vals,Y
 	STA vgm_player_reg_vals,Y
 
-	PHA
-
 	\\ Trigger beat on volume
+	IF VGM_TRIGGER_BEAT_ON_VOLUME
+	TAX
 	TYA:LSR A:TAY						; channel is register / 2
-
-	PLA
+	TXA
 	CMP #9
 	BCC set_beat_vol
 	LDA #9
 	.set_beat_vol
 	STA vgm_chan_array, Y
+	ENDIF
+
 	JMP return
 
 	\\ Frequency / tone data
