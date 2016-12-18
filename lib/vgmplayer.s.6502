@@ -350,6 +350,18 @@ PSG_STROBE_CLI_INSN = psg_strobe + 25
 	LDA #SN_VOL_MAX
 	SBC vgm_player_reg_vals,Y
 	STA vgm_player_reg_vals,Y
+
+	PHA
+
+	\\ Trigger beat on volume
+	TYA:LSR A:TAY						; channel is register / 2
+
+	PLA
+	CMP #9
+	BCC set_beat_vol
+	LDA #9
+	.set_beat_vol
+	STA vgm_chan_array, Y
 	JMP return
 
 	\\ Frequency / tone data
