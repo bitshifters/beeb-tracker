@@ -30,10 +30,10 @@
             ]
         },
         {
-            "taskName": "Run 'beebtrk3.ssd' in Emulator",
+            "taskName": "Run 'vgmtest.ssd' in Emulator",
             "isTestCommand": true,
             "args": [
-                "BeebEm.exe beebtrk3.ssd"
+                "BeebEm.exe vgmtest.ssd"
             ]
         },
         {
@@ -74,6 +74,26 @@
             },
             "args": [
                 "BeebAsm.exe -v -i beebtrk3.6502 -do beebtrk3.ssd -opt 2"
+            ]
+        },
+        {
+            "taskName": "vgmtest.ssd",
+            "problemMatcher": {
+                "owner": "6502",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            },
+            "args": [
+                "BeebAsm.exe -v -i vgmtest.6502 -do vgmtest.ssd -opt 2"
             ],
             "isBuildCommand": true
         }
