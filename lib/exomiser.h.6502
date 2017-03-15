@@ -31,9 +31,10 @@ EXO_buffer_end = EXO_buffer_start + EXO_buffer_len
 ; -------------------------------------------------------------------
 
 EXO_TABL_SIZE = 156
-exo_tabl_bi  = &0d9f - EXO_TABL_SIZE
-exo_tabl_lo = exo_tabl_bi + 52
-exo_tabl_hi = exo_tabl_bi + 104
+; can't use NMI workspace with TurboMMC :S
+;exo_tabl_bi  = &0d9f - EXO_TABL_SIZE
+;exo_tabl_lo = exo_tabl_bi + 52
+;exo_tabl_hi = exo_tabl_bi + 104
 
 
 \\ Declare ZP vars
