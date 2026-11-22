@@ -5,7 +5,7 @@ Beeb Tracker, a Bitshifters music disk series for the BBC Micro (6502, beebasm):
 | | |
 |---|---|
 | GitHub | https://github.com/bitshifters/beeb-tracker (public) |
-| Local path | D:\beeb\mine\beeb-tracker (moved from OneDrive\BEEB\Repos\beeb-tracker in the 2026-11 tidy) |
+| Local path | D:\bitshifters\beeb-tracker (moved from OneDrive\BEEB\Repos\beeb-tracker in the 2026-11 tidy) |
 | Branch | wip/wonderboy-3 (checked out, pushed); others: master (2016, "Added vgmtest build target"), bugfix-turbommc-nmi, feature-beat-on-volume |
 | Last commit | 2024-08-07: Beeb Tracker volume 5. |
 
@@ -17,8 +17,8 @@ Beeb Tracker, a Bitshifters music disk series for the BBC Micro (6502, beebasm):
 - `notes.txt`: the original to-do/design notes; `beebtrk.md`, `beebtrk2.md`: disc notes.
 
 ## Build and run
-- `make`: runs `make.bat` (Makefile added 2026-11-22): beebasm (`..\..\Bin\beebasm.exe`) builds `beebtrk5.ssd`, appending its listing to `compile.txt`. Works. The other volumes' lines are commented out in `make.bat`.
-- `make help` lists targets. `run.bat` launches `..\..\Tools\B-emV2.2Win\B-em.exe beebtrk.ssd` (volume 1, not 5).
+- `make`: runs `make.bat` (Makefile added 2026-11-22): beebasm (`..\Bin\beebasm.exe`) builds `beebtrk5.ssd`, appending its listing to `compile.txt`. Works. The other volumes' lines are commented out in `make.bat`.
+- `make help` lists targets. `run.bat` launches `..\Tools\B-emV2.2Win\B-em.exe beebtrk.ssd` (volume 1, not 5).
 - Output: `beebtrk5.ssd` is new and untracked (not gitignored), unlike the tracked volume 1-3 discs.
 
 ## Local changes
